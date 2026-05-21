@@ -123,6 +123,7 @@ export interface Settings {
   fontFamily: string;
   customFont: CustomFont | null;
   titleColor: string;
+  titleScale: number;
   subheadColor: string;
   subtitleScale: number;
   background: Background;
