@@ -3,6 +3,8 @@
   --bg: #f6f3ec;
   --panel: #ffffff;
   --ink: #1a1612;
+  --brand-mark-bg: #1a1618;
+  --brand-left-fill: #f0e4cc;
   --dim: rgba(26,22,18,0.62);
   --rule: rgba(26,22,18,0.10);
   --rule-strong: rgba(26,22,18,0.18);
@@ -56,7 +58,7 @@ body {
 .brand__mark {
   width: 22px; height: 22px;
   display: grid; place-items: center;
-  background: #1a1618;
+  background: var(--brand-mark-bg);
   border-radius: 6px;
 }
 .brand__name { font-weight: 700; font-size: 14px; letter-spacing: -0.01em; }
@@ -481,6 +483,8 @@ button { cursor: pointer; font: inherit; }
 /* ── Dark mode ── */
 [data-theme="dark"] {
   --bg: #1e1b22;
+  --brand-mark-bg: #f0ece4;
+  --brand-left-fill: #4a3420;
   --panel: #272330;
   --ink: #f0ece4;
   --dim: rgba(240,236,228,0.50);
