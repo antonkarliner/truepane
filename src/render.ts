@@ -1076,7 +1076,7 @@ export async function paintSlide(
   const ctx = get2d(canvas);
   ctx.clearRect(0, 0, F.W, F.H);
 
-  paintBackground(ctx, settings.background, slideIndex, totalSlides, F);
+  paintBackground(ctx, slide.background ?? settings.background, slideIndex, totalSlides, F);
   paintText(ctx, slide, settings, F);
   paintScreenshot(ctx, slide.image, F);
   paintFrameOverlay(ctx, F);

@@ -46,6 +46,7 @@ function loadState(): AppState {
         subhead: sl.subhead || "",
         image: null,
         imageDataUrl: sl.imageDataUrl || null,
+        background: sl.background ? normalizeBackground(sl.background) : undefined,
       }));
     }
     return s;
@@ -62,6 +63,7 @@ function persistState(state: AppState): void {
         title: s.title,
         subhead: s.subhead,
         imageDataUrl: s.imageDataUrl || null,
+        background: s.background,
       })),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -171,6 +173,19 @@ export function App() {
       settings: { ...s.settings, background: { ...s.settings.background, ...patch } },
     }));
   }, []);
+
+  const updateSlideBackground = useCallback(
+    (idx: number, patch: Partial<Background>) => {
+      setState((s) => {
+        const next = s.slides.slice();
+        const slide = next[idx];
+        const current = slide.background ?? s.settings.background;
+        next[idx] = { ...slide, background: { ...current, ...patch } };
+        return { ...s, slides: next };
+      });
+    },
+    [],
+  );
 
   const addSlide = useCallback(() => {
     setState((s) => {
@@ -310,6 +325,7 @@ export function App() {
         title: s.title,
         subhead: s.subhead,
         imageDataUrl: s.imageDataUrl || null,
+        background: s.background,
       })),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -333,6 +349,7 @@ export function App() {
         subhead: sl.subhead || "",
         image: null,
         imageDataUrl: sl.imageDataUrl || null,
+        background: sl.background ? normalizeBackground(sl.background) : undefined,
       }));
     }
     const slides = await hydrateImages(s.slides);
@@ -393,6 +410,7 @@ export function App() {
         updateBackground={updateBackground}
         selected={selected}
         updateSlide={(patch) => updateSlide(selectedIndex, patch)}
+        updateSlideBackground={(patch) => updateSlideBackground(selectedIndex, patch)}
         deleteSelected={() => deleteSlide(selectedIndex)}
         moveSelected={(dir) => moveSlide(selectedIndex, selectedIndex + dir)}
         exportPng={exportPng}

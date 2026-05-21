@@ -21,6 +21,7 @@ interface SidebarProps {
   onCustomFont: (file: File) => void;
   updateSettings: (patch: Partial<Settings>) => void;
   updateBackground: (patch: Partial<Background>) => void;
+  updateSlideBackground: (patch: Partial<Background>) => void;
   selected: Slide;
   updateSlide: (patch: Partial<Slide>) => void;
   deleteSelected: () => void;
@@ -42,6 +43,7 @@ export function Sidebar(props: SidebarProps) {
     onCustomFont,
     updateSettings,
     updateBackground,
+    updateSlideBackground,
     selected,
     updateSlide,
     deleteSelected,
@@ -100,9 +102,9 @@ export function Sidebar(props: SidebarProps) {
         if (params.gradientColor !== undefined) recolor.gradientColor = params.gradientColor;
         if (params.accent !== undefined) recolor.accent = params.accent;
         if (params.accentOpacity !== undefined) recolor.accentOpacity = params.accentOpacity;
-        updateBackground(recolor);
+        handleBgUpdate(recolor);
       } else {
-        updateBackground(params);
+        handleBgUpdate(params);
       }
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "Generation failed");
@@ -119,7 +121,16 @@ export function Sidebar(props: SidebarProps) {
     updateSlide({ image: null, imageDataUrl: null });
   };
 
-  const bg = state.settings.background;
+  const hasSlideOverride = !!selected.background;
+  const bg = selected.background ?? state.settings.background;
+  const handleBgUpdate = hasSlideOverride ? updateSlideBackground : updateBackground;
+  const toggleSlideOverride = () => {
+    if (hasSlideOverride) {
+      updateSlide({ background: undefined });
+    } else {
+      updateSlide({ background: { ...state.settings.background } });
+    }
+  };
   const slidesCount = state.slides.length;
   const platform = state.settings.platform || "ios";
   const dim = dimFor(platform);
@@ -132,9 +143,9 @@ export function Sidebar(props: SidebarProps) {
   const matchPalette = () => {
     if (!selected.image) return;
     const p = extractPalette(selected.image);
-    if (p) updateBackground({ color: p.color, accent: p.accent });
+    if (p) handleBgUpdate({ color: p.color, accent: p.accent });
   };
-  const randomizeSeed = () => updateBackground({ seed: Math.floor(Math.random() * 1e9) });
+  const randomizeSeed = () => handleBgUpdate({ seed: Math.floor(Math.random() * 1e9) });
 
   // Shape-color preset swatches: harmonized to the background when auto-adjust
   // is on, otherwise a fixed palette.
@@ -284,6 +295,11 @@ export function Sidebar(props: SidebarProps) {
       <section className="panel">
         <div className="panel__title">Background</div>
 
+        <label className="ai-lock">
+          <input type="checkbox" checked={hasSlideOverride} onChange={toggleSlideOverride} />
+          Override for this slide only
+        </label>
+
         {aiConfigured && (
           <Field label="Generate with AI" hint="Describe a vibe; AI picks a style + palette.">
             <TextInput value={aiPrompt} onChange={setAiPrompt} placeholder="e.g. calm, warm, organic" />
@@ -328,7 +344,7 @@ export function Sidebar(props: SidebarProps) {
           <select
             className="text-input"
             value={bg.fill}
-            onChange={(e) => updateBackground({ fill: e.target.value as BackgroundFill })}
+            onChange={(e) => handleBgUpdate({ fill: e.target.value as BackgroundFill })}
           >
             {FILL_OPTIONS.map((f) => (
               <option key={f.id} value={f.id}>
@@ -347,7 +363,7 @@ export function Sidebar(props: SidebarProps) {
               max="360"
               step="5"
               value={bg.gradientAngle ?? 135}
-              onChange={(e) => updateBackground({ gradientAngle: parseInt(e.target.value, 10) })}
+              onChange={(e) => handleBgUpdate({ gradientAngle: parseInt(e.target.value, 10) })}
             />
           </Field>
         )}
@@ -356,14 +372,14 @@ export function Sidebar(props: SidebarProps) {
         <ColorRow
           label={isGradient ? "Gradient start" : "Background color"}
           value={bg.color}
-          onChange={(v) => updateBackground({ color: v })}
+          onChange={(v) => handleBgUpdate({ color: v })}
           onEyedrop={requestEyedrop}
         />
         {isGradient && (
           <ColorRow
             label="Gradient end"
             value={bg.gradientColor}
-            onChange={(v) => updateBackground({ gradientColor: v })}
+            onChange={(v) => handleBgUpdate({ gradientColor: v })}
             onEyedrop={requestEyedrop}
             presets={DEFAULT_SHAPE_PRESETS}
           />
@@ -374,7 +390,7 @@ export function Sidebar(props: SidebarProps) {
           <select
             className="text-input"
             value={bg.shape}
-            onChange={(e) => updateBackground({ shape: e.target.value as ShapeKind })}
+            onChange={(e) => handleBgUpdate({ shape: e.target.value as ShapeKind })}
           >
             {SHAPE_FAMILIES.map((f) => (
               <option key={f.id} value={f.id}>
@@ -390,7 +406,7 @@ export function Sidebar(props: SidebarProps) {
               <LayoutSlider
                 layouts={RING_LAYOUTS}
                 value={bg.ringLayout || "calm"}
-                onChange={(v) => updateBackground({ ringLayout: v })}
+                onChange={(v) => handleBgUpdate({ ringLayout: v })}
               />
             </Field>
             <Field label={`Rings per group · ${bg.ringCount ?? 4}`}>
@@ -401,7 +417,7 @@ export function Sidebar(props: SidebarProps) {
                 max="8"
                 step="1"
                 value={bg.ringCount ?? 4}
-                onChange={(e) => updateBackground({ ringCount: parseInt(e.target.value, 10) })}
+                onChange={(e) => handleBgUpdate({ ringCount: parseInt(e.target.value, 10) })}
               />
             </Field>
           </>
@@ -416,7 +432,7 @@ export function Sidebar(props: SidebarProps) {
               max="8"
               step="1"
               value={bg.density ?? 3}
-              onChange={(e) => updateBackground({ density: parseInt(e.target.value, 10) })}
+              onChange={(e) => handleBgUpdate({ density: parseInt(e.target.value, 10) })}
             />
           </Field>
         )}
@@ -426,7 +442,7 @@ export function Sidebar(props: SidebarProps) {
             <input
               type="checkbox"
               checked={bg.dotsAligned ?? false}
-              onChange={(e) => updateBackground({ dotsAligned: e.target.checked })}
+              onChange={(e) => handleBgUpdate({ dotsAligned: e.target.checked })}
             />
             Align to grid
           </label>
@@ -441,7 +457,7 @@ export function Sidebar(props: SidebarProps) {
               max="1"
               step="0.05"
               value={bg.accentOpacity}
-              onChange={(e) => updateBackground({ accentOpacity: parseFloat(e.target.value) })}
+              onChange={(e) => handleBgUpdate({ accentOpacity: parseFloat(e.target.value) })}
             />
           </Field>
         )}
@@ -458,7 +474,7 @@ export function Sidebar(props: SidebarProps) {
             <ColorRow
               label={accentLabel}
               value={bg.accent}
-              onChange={(v) => updateBackground({ accent: v })}
+              onChange={(v) => handleBgUpdate({ accent: v })}
               onEyedrop={requestEyedrop}
               presets={shapePresets}
             />
@@ -490,7 +506,7 @@ export function Sidebar(props: SidebarProps) {
               <button
                 key={p.name}
                 className={"bg-preset" + (bg.color === p.color ? " active" : "")}
-                onClick={() => updateBackground({ color: p.color, accent: p.accent })}
+                onClick={() => handleBgUpdate({ color: p.color, accent: p.accent })}
                 title={p.name}
               >
                 <span className="bg-preset__chip" style={{ background: p.color }}>
