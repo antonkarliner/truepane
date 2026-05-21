@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e07828"/>
+      <stop offset="100%" stop-color="#8840b8"/>
+    </linearGradient>
+  </defs>
+  <!-- Warm cream background -->
+  <rect width="32" height="32" rx="7" fill="#f4f1ea"/>
+  <!-- Left strip: muted warm brown (visible on cream) -->
+  <rect x="4" y="8" width="5.5" height="16" rx="1.6" fill="#a89070"/>
+  <!-- Middle strip: same gradient -->
+  <rect x="13.25" y="6" width="5.5" height="20" rx="1.6" fill="url(#g)"/>
+  <!-- Right strip: deeper purple -->
+  <rect x="22.5" y="8" width="5.5" height="16" rx="1.6" fill="#5c4e96"/>
+  <!-- Camera dots -->
+  <circle cx="6.75" cy="10.2" r="0.75" fill="#f4f1ea" opacity="0.6"/>
+  <circle cx="16" cy="8.2" r="0.75" fill="#f4f1ea" opacity="0.5"/>
+  <circle cx="25.25" cy="10.2" r="0.75" fill="#f4f1ea" opacity="0.6"/>
+</svg>
