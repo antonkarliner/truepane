@@ -92,6 +92,29 @@ async function hydrateImages(slides: Slide[]): Promise<Slide[]> {
 }
 
 // ---------------------------------------------------------------------------
+// Theme
+// ---------------------------------------------------------------------------
+const THEME_KEY = "appstore-theme";
+
+function applyFavicon(theme: "light" | "dark") {
+  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (link) link.href = theme === "dark" ? "/favicon-dark.svg" : "/favicon-light.svg";
+}
+
+function initialTheme(): "light" | "dark" {
+  const stored = localStorage.getItem(THEME_KEY);
+  const theme =
+    stored === "light" || stored === "dark"
+      ? stored
+      : window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+  document.documentElement.dataset.theme = theme;
+  applyFavicon(theme);
+  return theme;
+}
+
+// ---------------------------------------------------------------------------
 // Font loading helper — load a Google Font on demand.
 // ---------------------------------------------------------------------------
 const loadedGoogleFonts = new Set<string>();
@@ -125,6 +148,17 @@ export function App() {
   const [, setFontsReady] = useState(0); // bump to trigger rerender on font load
   const [exporting, setExporting] = useState<null | "png" | "strip" | "zip">(null);
   const [eyedropTarget, setEyedropTarget] = useState<((hex: string) => void) | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => {
+      const next = t === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      localStorage.setItem(THEME_KEY, next);
+      applyFavicon(next);
+      return next;
+    });
+  }, []);
 
   // Initial load + hydrate
   useEffect(() => {
@@ -420,6 +454,8 @@ export function App() {
         importJson={importJson}
         exporting={exporting}
         requestEyedrop={requestEyedrop}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
       <main className="stage">
         <div className="stage__bar">
