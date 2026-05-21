@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Store Strip Generator">
+  <rect width="32" height="32" rx="7" fill="#1d1d1f" />
+  <rect x="5.5" y="7" width="5.5" height="18" rx="1.6" fill="#f2eee6" />
+  <rect x="13.25" y="7" width="5.5" height="18" rx="1.6" fill="#c47c3b" />
+  <rect x="21" y="7" width="5.5" height="18" rx="1.6" fill="#f2eee6" />
+</svg>

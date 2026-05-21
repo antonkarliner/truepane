@@ -1,0 +1,133 @@
+# App Store Strip Generator
+
+A small, fast, browser-based tool for generating App Store / Google Play screenshot
+strips — title + subhead text, a device frame, your screenshot, and a generated
+background, exported as individual PNGs, a horizontal strip, or a ZIP.
+
+Everything renders to `<canvas>` in the browser. No screenshots are ever uploaded to
+a server; nothing leaves your machine. The only network feature is an optional AI
+prompt helper (see below), and it only ever sends the text prompt.
+
+## Why this exists
+
+Most screenshot generators composite a pre-rendered PNG of a phone. This one **draws
+the device frame procedurally** on a canvas — body, bezel, buttons, camera, and the
+screen mask are all geometry, not bitmaps. That choice drives most of what makes the
+tool small, sharp, and cheap to run.
+
+## Features
+
+- **Procedural device frames** at exact store sizes: iPhone 6.9″ (1320×2868), iPad 13″
+  (2064×2752), Android phone (1080×2400), Android tablet (1600×2560).
+- **Backgrounds = fill + shape.** A fill layer (solid, or linear/radial gradient) plus an
+  optional shape overlay (rings, blobs, waves, dots, mesh, arcs, triangles, grid, zigzag,
+  bubbles), each with independent colors. Shapes flow continuously across the strip and
+  reproduce exactly from a stored seed.
+- **Color tools**: content-based palette extraction from your screenshot, harmonized shape
+  suggestions, an eyedropper (native EyeDropper API + a click-a-slide fallback for
+  Safari/Firefox), and curated color-science presets.
+- **AI prompt → style** (optional): describe a vibe ("calm, warm, organic") and a Groq
+  model returns a style + palette. Bring your own Groq key, or use the hosted endpoint.
+- **Typography**: curated Google Fonts (incl. Apple/Android system fonts and Noto
+  multi-script + CJK) plus custom `.ttf/.otf/.woff(2)` upload.
+- **Export**: per-slide PNG, one horizontal strip PNG, or a ZIP of everything. Plus JSON
+  project import/export. State auto-saves to `localStorage`.
+
+## Design decisions (the interesting part)
+
+Each of these was a deliberate fork, chosen for a reason:
+
+- **Procedural frames, not image mockups.** The target is *flat store-submission*
+  screenshots at exact required resolutions — which procedural drawing nails: crisp at
+  any scale, no asset pipeline, and **no licensing exposure** (most "free" device-mockup
+  packs are not actually clean for commercial redistribution). The trade-off we accept:
+  no angled/perspective marketing shots.
+- **Parametric backgrounds, not diffusion images.** Backgrounds are seeded procedural
+  shapes that reproduce exactly and stay tasteful. A raster image model would be
+  unpredictable, costly per call, hard to keep consistent across a set, and would force a
+  heavier backend. AI is used only as a thin **prompt → parameters** layer.
+- **Content-based palette** runs entirely client-side — no model, no cost.
+- **$0-egress architecture.** The app is static and all image work happens in the
+  browser, so hosting bandwidth is effectively free. The only metered cost is the
+  optional AI prompt call, which is rate-limited and can be replaced with your own key.
+
+## Architecture
+
+- **`src/render.ts`** — the rendering engine. Pure canvas drawing, no React. Defines the
+  device frames and paints every pixel.
+  - **Concentric-corner invariant:** the BODY / BEZEL / SCREEN rounded rects share a
+    center of curvature (`x + r` equal across all three; same for `y + r`). Breaking it
+    produces "laddery" corner kinks. New frames go through `defineFrame()`, which throws
+    on violation; the `shell()` helper derives the inner rects so the invariant holds by
+    construction.
+  - Backgrounds render in two layers: a **fill** (solid / linear / radial gradient) then an
+    optional **shape** overlay from a generator registry. Each shape lays out in strip-space
+    so it flows across slides; a seeded `mulberry32` PRNG keeps a strip reproducible.
+  - Masking uses offscreen canvases with `destination-in` / `destination-out` (rather
+    than `ctx.clip()`) to get antialiased edges.
+- **`src/App.tsx`** — single source of truth for `{ slides, settings }`, persistence
+  (`localStorage`), font loading, and all export paths.
+- **`src/Sidebar.tsx`** — the control panel. **`src/components.tsx`** — reusable controls
+  and the slide preview. **`src/palette.ts`** — screenshot palette extraction.
+  **`src/ai.ts`** — client for the AI endpoint.
+- **`supabase/functions/generator-bg-prompt/`** — the Edge Function that turns a prompt
+  into validated, clamped style params (raw model output never reaches the renderer).
+
+## Running locally
+
+```sh
+npm install
+npm run dev        # http://localhost:5173
+npm run build      # tsc -b && vite build → dist/
+npm run preview    # serve the production build
+npm run typecheck
+npm test           # vitest (pure-logic suite)
+```
+
+## Configuration
+
+The AI prompt feature is optional. Without it, the app is fully functional and the
+"Generate with AI" control is hidden. To enable it, copy `.env.example` to `.env`:
+
+```
+VITE_BG_PROMPT_URL=https://YOUR-PROJECT.supabase.co/functions/v1/generator-bg-prompt
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+The Edge Function reads `GROQ_API_KEY` from its Supabase secrets (and an optional
+`BG_PROMPT_MODEL`, default `llama-3.3-70b-versatile`). Deploy it with:
+
+```sh
+supabase functions deploy generator-bg-prompt --project-ref YOUR-REF --no-verify-jwt
+```
+
+Server-side rate limiting is currently best-effort (in-memory, per isolate). Add a
+durable limiter before a high-traffic public launch.
+
+### Temporary beta gate
+
+A soft, client-side password gate can be enabled during private beta by setting
+`VITE_GATE_PASSWORD_HASH` to the SHA-256 of your password (unset = no gate):
+
+```sh
+printf '%s' 'your-password' | shasum -a 256   # put the hash in .env
+```
+
+It's a deterrent, not real security (it's a static client app) — meant to be removed
+after beta.
+
+## Deployment
+
+Builds to a static site in `dist/` — deploy anywhere. **Cloudflare Pages** is recommended
+(unlimited bandwidth on the free tier, so egress stays $0): build command `npm run build`,
+output directory `dist`. Set the two `VITE_*` variables in the Pages project to enable AI.
+
+## License
+
+[AGPL-3.0](LICENSE). Because this is a client-side app, the source is distributed to
+every browser — so forks, **including publicly hosted ones**, must make their source
+available under the same license.
+
+## Support
+
+If this is useful to you, sponsorship is welcome — see [`.github/FUNDING.yml`](.github/FUNDING.yml).
