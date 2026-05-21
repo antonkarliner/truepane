@@ -5,7 +5,7 @@ import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimFor } from ".
 import { accentSuggestions, extractPalette } from "./palette";
 
 const DEFAULT_SHAPE_PRESETS = ["#c47c3b", "#1a1612", "#5b6647", "#c4523b", "#5b6cff", "#8a6f4f"];
-import { aiConfigured, generateBackground } from "./ai";
+import { aiConfigured, generateBackground, type AiProvider } from "./ai";
 import { BG_PRESETS, FONT_OPTIONS } from "./constants";
 import type { AppState, Background, BackgroundFill, ShapeKind, Settings, Slide, StoreId } from "./types";
 
@@ -72,6 +72,7 @@ export function Sidebar(props: SidebarProps) {
   const [showByok, setShowByok] = useState(false);
   const [autoAccent, setAutoAccent] = useState(true);
   const [showPresets, setShowPresets] = useState(false);
+  const [aiProvider, setAiProvider] = useState<AiProvider>("cerebras");
   const [byokKey, setByokKey] = useState(() => {
     try {
       return localStorage.getItem("groq-byok") || "";
@@ -95,7 +96,11 @@ export function Sidebar(props: SidebarProps) {
     setAiError(null);
     setAiNote(null);
     try {
-      const { params, note, text } = await generateBackground(aiPrompt.trim(), byokKey || undefined);
+      const { params, note, text } = await generateBackground(
+        aiPrompt.trim(),
+        aiProvider,
+        aiProvider === "groq" ? byokKey || undefined : undefined,
+      );
       setAiNote(note || null);
       // Apply legible text colors derived from the chosen background.
       if (text) updateSettings({ titleColor: text.titleColor, subheadColor: text.subheadColor });
@@ -353,6 +358,14 @@ export function Sidebar(props: SidebarProps) {
 
         {aiConfigured && (
           <Field label="Generate with AI" hint="Describe a vibe; AI picks a style + palette.">
+            <Segmented
+              value={aiProvider}
+              onChange={(v) => setAiProvider(v as AiProvider)}
+              options={[
+                { value: "cerebras", label: "Cerebras 120B" },
+                { value: "groq", label: "Groq 70B" },
+              ]}
+            />
             <TextInput value={aiPrompt} onChange={setAiPrompt} placeholder="e.g. calm, warm, organic" />
             <button
               className="ghost small upload-btn"
@@ -369,24 +382,28 @@ export function Sidebar(props: SidebarProps) {
               />
               Lock style (recolor only)
             </label>
-            <button className="ghost small upload-btn" onClick={() => setShowByok((s) => !s)}>
-              {showByok ? "Hide key field" : "Use my own Groq key"}
-            </button>
-            {showByok && (
-              <input
-                className="text-input"
-                type="password"
-                placeholder="gsk_… (stored in this browser only)"
-                value={byokKey}
-                onChange={(e) => setByok(e.target.value)}
-              />
+            {aiProvider === "groq" && (
+              <>
+                <button className="ghost small upload-btn" onClick={() => setShowByok((s) => !s)}>
+                  {showByok ? "Hide key field" : "Use my own Groq key"}
+                </button>
+                {showByok && (
+                  <input
+                    className="text-input"
+                    type="password"
+                    placeholder="gsk_… (stored in this browser only)"
+                    value={byokKey}
+                    onChange={(e) => setByok(e.target.value)}
+                  />
+                )}
+              </>
             )}
             {aiError && (
               <div className="field__hint" style={{ color: "#c4523b" }}>
                 {aiError}
               </div>
             )}
-            {aiNote && !aiError && <div className="ai-note">“{aiNote}”</div>}
+            {aiNote && !aiError && <div className="ai-note">"{aiNote}"</div>}
           </Field>
         )}
 

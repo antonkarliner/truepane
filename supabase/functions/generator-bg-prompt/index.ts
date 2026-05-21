@@ -8,8 +8,11 @@
 // BG_PROMPT_MODEL. Deployed with verify_jwt=false (public, anonymous tool).
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions";
 const MODEL = Deno.env.get("BG_PROMPT_MODEL") || "llama-3.3-70b-versatile";
+const CEREBRAS_MODEL = "gpt-oss-120b";
 const SERVER_GROQ_KEY = Deno.env.get("GROQ_API_KEY") || "";
+const SERVER_CEREBRAS_KEY = Deno.env.get("CEREBRAS_API_KEY") || "";
 
 const FILLS = ["solid", "linear", "radial"];
 const SHAPES = [
@@ -159,19 +162,25 @@ Deno.serve(async (req: Request) => {
   const prompt = typeof body?.prompt === "string" ? body.prompt.slice(0, 400).trim() : "";
   if (!prompt) return new Response(JSON.stringify({ error: "Missing prompt" }), { status: 400, headers });
 
+  const provider = body?.provider === "cerebras" ? "cerebras" : "groq";
+
   // BYOK: a user-supplied Groq key is used for this request only, never stored.
   const byok = typeof body?.key === "string" && body.key.startsWith("gsk_") ? body.key : "";
-  const apiKey = byok || SERVER_GROQ_KEY;
+  const apiKey = provider === "cerebras" ? SERVER_CEREBRAS_KEY : (byok || SERVER_GROQ_KEY);
+  const apiUrl = provider === "cerebras" ? CEREBRAS_URL : GROQ_URL;
+  const model = provider === "cerebras" ? CEREBRAS_MODEL : MODEL;
+
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: "No Groq API key configured" }), { status: 500, headers });
+    const missing = provider === "cerebras" ? "CEREBRAS_API_KEY" : "GROQ_API_KEY";
+    return new Response(JSON.stringify({ error: `No ${missing} configured` }), { status: 500, headers });
   }
 
   try {
-    const resp = await fetch(GROQ_URL, {
+    const resp = await fetch(apiUrl, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         messages: [
           { role: "system", content: SYSTEM },
           { role: "user", content: prompt },
@@ -185,8 +194,9 @@ Deno.serve(async (req: Request) => {
 
     if (!resp.ok) {
       const detail = await resp.text();
+      const providerLabel = provider === "cerebras" ? "Cerebras" : "Groq";
       return new Response(
-        JSON.stringify({ error: `Groq error ${resp.status}`, detail: detail.slice(0, 300) }),
+        JSON.stringify({ error: `${providerLabel} error ${resp.status}`, detail: detail.slice(0, 300) }),
         { status: 502, headers },
       );
     }

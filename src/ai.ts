@@ -15,7 +15,13 @@ export interface AiResult {
   text: { titleColor: string; subheadColor: string } | null;
 }
 
-export async function generateBackground(prompt: string, byokKey?: string): Promise<AiResult> {
+export type AiProvider = "groq" | "cerebras";
+
+export async function generateBackground(
+  prompt: string,
+  provider: AiProvider = "groq",
+  byokKey?: string,
+): Promise<AiResult> {
   if (!FN_URL) throw new Error("AI endpoint not configured (set VITE_BG_PROMPT_URL).");
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -27,7 +33,11 @@ export async function generateBackground(prompt: string, byokKey?: string): Prom
   const res = await fetch(FN_URL, {
     method: "POST",
     headers,
-    body: JSON.stringify({ prompt, ...(byokKey ? { key: byokKey } : {}) }),
+    body: JSON.stringify({
+      prompt,
+      provider,
+      ...(byokKey && provider === "groq" ? { key: byokKey } : {}),
+    }),
   });
 
   const data = await res.json().catch(() => ({}));
