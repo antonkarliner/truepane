@@ -124,6 +124,7 @@ export interface Settings {
   customFont: CustomFont | null;
   titleColor: string;
   subheadColor: string;
+  subtitleScale: number;
   background: Background;
 }
 

@@ -236,12 +236,23 @@ export function Sidebar(props: SidebarProps) {
             placeholder="Your headline here"
           />
         </Field>
-        <Field label="Subhead" hint="Wraps to 2 lines automatically.">
+        <Field label="Subtitle" hint="Wraps to 2 lines automatically.">
           <TextInput
             multiline
             value={selected.subhead}
             onChange={(v) => updateSlide({ subhead: v })}
-            placeholder="A short, benefit-driven subhead."
+            placeholder="A short, benefit-driven subtitle."
+          />
+        </Field>
+        <Field label={`Subtitle size · ${Math.round((state.settings.subtitleScale ?? 1) * 100)}%`}>
+          <input
+            className="slider"
+            type="range"
+            min="0.5"
+            max="1.5"
+            step="0.05"
+            value={state.settings.subtitleScale ?? 1}
+            onChange={(e) => updateSettings({ subtitleScale: parseFloat(e.target.value) })}
           />
         </Field>
 
@@ -293,7 +304,7 @@ export function Sidebar(props: SidebarProps) {
           presets={["#1a1612", "#0a0a0a", "#3b2a1b", "#ffffff", "#f6f3ec", "#c47c3b"]}
         />
         <ColorRow
-          label="Subhead color"
+          label="Subtitle color"
           value={state.settings.subheadColor}
           onChange={(v) => updateSettings({ subheadColor: v })}
           onEyedrop={requestEyedrop}
