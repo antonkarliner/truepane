@@ -94,9 +94,10 @@ export function Sidebar(props: SidebarProps) {
       // Apply legible text colors derived from the chosen background.
       if (text) updateSettings({ titleColor: text.titleColor, subheadColor: text.subheadColor });
       if (lockStyle) {
-        // Recolor only: keep the user's pattern, layout, density, and seed.
+        // Recolor only: keep the user's fill/shape, layout, density, and seed.
         const recolor: Partial<Background> = {};
         if (params.color !== undefined) recolor.color = params.color;
+        if (params.gradientColor !== undefined) recolor.gradientColor = params.gradientColor;
         if (params.accent !== undefined) recolor.accent = params.accent;
         if (params.accentOpacity !== undefined) recolor.accentOpacity = params.accentOpacity;
         updateBackground(recolor);
@@ -351,6 +352,23 @@ export function Sidebar(props: SidebarProps) {
           </Field>
         )}
 
+        {/* Fill colors */}
+        <ColorRow
+          label={isGradient ? "Gradient start" : "Background color"}
+          value={bg.color}
+          onChange={(v) => updateBackground({ color: v })}
+          onEyedrop={requestEyedrop}
+        />
+        {isGradient && (
+          <ColorRow
+            label="Gradient end"
+            value={bg.gradientColor}
+            onChange={(v) => updateBackground({ gradientColor: v })}
+            onEyedrop={requestEyedrop}
+            presets={DEFAULT_SHAPE_PRESETS}
+          />
+        )}
+
         {/* Shape overlay */}
         <Field label="Shape">
           <select
@@ -434,24 +452,7 @@ export function Sidebar(props: SidebarProps) {
           </button>
         )}
 
-        {/* Colors */}
-        <ColorRow
-          label={isGradient ? "Gradient start" : "Background color"}
-          value={bg.color}
-          onChange={(v) => updateBackground({ color: v })}
-          onEyedrop={requestEyedrop}
-        />
-
-        {isGradient && (
-          <ColorRow
-            label="Gradient end"
-            value={bg.gradientColor}
-            onChange={(v) => updateBackground({ gradientColor: v })}
-            onEyedrop={requestEyedrop}
-            presets={DEFAULT_SHAPE_PRESETS}
-          />
-        )}
-
+        {/* Shape color */}
         {hasShape && (
           <>
             <ColorRow
