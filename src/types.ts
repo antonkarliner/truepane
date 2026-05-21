@@ -132,6 +132,7 @@ export interface Slide {
   subhead: string;
   image: HTMLImageElement | null;
   imageDataUrl: string | null;
+  background?: Background;
 }
 
 export interface AppState {
