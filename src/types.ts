@@ -135,6 +135,8 @@ export interface Slide {
   image: HTMLImageElement | null;
   imageDataUrl: string | null;
   background?: Background;
+  titleColor?: string;
+  subheadColor?: string;
 }
 
 export interface AppState {
