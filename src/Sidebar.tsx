@@ -552,6 +552,11 @@ export function Sidebar(props: SidebarProps) {
           />
         </div>
         <div className="muted small">Auto-saved to this browser.</div>
+        <div className="muted small" style={{ marginTop: 4 }}>
+          <a href="https://github.com/antonkarliner/appstore-strip-generator" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>
+            GitHub
+          </a>
+        </div>
       </section>
     </aside>
   );
