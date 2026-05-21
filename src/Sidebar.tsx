@@ -168,7 +168,7 @@ export function Sidebar(props: SidebarProps) {
                     <stop offset="100%" stopColor="#8840b8"/>
                   </linearGradient>
                 </defs>
-                <rect x="4" y="8" width="5.5" height="16" rx="1.6" fill="#f0e4cc"/>
+                <rect x="4" y="8" width="5.5" height="16" rx="1.6" style={{fill: 'var(--brand-left-fill)'}}/>
                 <rect x="13.25" y="6" width="5.5" height="20" rx="1.6" fill="url(#bm_g)"/>
                 <rect x="22.5" y="8" width="5.5" height="16" rx="1.6" fill="#7060a8"/>
                 <circle cx="6.75" cy="10.2" r="0.75" fill="#18141c" opacity="0.45"/>
