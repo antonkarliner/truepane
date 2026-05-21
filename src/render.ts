@@ -973,7 +973,7 @@ function paintText(
   ctx.textBaseline = "top";
 
   const titleScale = settings.titleScale ?? 1;
-  ctx.fillStyle = settings.titleColor || "#1a1612";
+  ctx.fillStyle = slide.titleColor ?? (settings.titleColor || "#1a1612");
   ctx.font = `${T.titleWeight} ${Math.round(T.titleFontSize * titleScale)}px ${font}`;
   const titleLines = wrapText(ctx, slide.title || "", maxW);
   let y = T.titleTop;
@@ -985,7 +985,7 @@ function paintText(
 
   if (slide.subhead) {
     const scale = settings.subtitleScale ?? 1;
-    ctx.fillStyle = settings.subheadColor || "rgba(26,22,18,0.62)";
+    ctx.fillStyle = slide.subheadColor ?? (settings.subheadColor || "rgba(26,22,18,0.62)");
     ctx.font = `${T.subheadWeight} ${Math.round(T.subheadFontSize * scale)}px ${font}`;
     const subLines = wrapText(ctx, slide.subhead, maxW);
     let sy = Math.max(T.subheadTop, titleBottom + 30);

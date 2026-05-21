@@ -130,6 +130,18 @@ export function Sidebar(props: SidebarProps) {
     updateSlide({ image: null, imageDataUrl: null });
   };
 
+  const hasTextOverride = selected.titleColor !== undefined || selected.subheadColor !== undefined;
+  const toggleTextOverride = () => {
+    if (hasTextOverride) {
+      updateSlide({ titleColor: undefined, subheadColor: undefined });
+    } else {
+      updateSlide({
+        titleColor: state.settings.titleColor,
+        subheadColor: state.settings.subheadColor,
+      });
+    }
+  };
+
   const hasSlideOverride = !!selected.background;
   const bg = selected.background ?? state.settings.background;
   const handleBgUpdate = hasSlideOverride ? updateSlideBackground : updateBackground;
@@ -333,6 +345,36 @@ export function Sidebar(props: SidebarProps) {
             "#666666",
           ]}
         />
+
+        <label className="ai-lock">
+          <input type="checkbox" checked={hasTextOverride} onChange={toggleTextOverride} />
+          Override for this slide only
+        </label>
+        {hasTextOverride && (
+          <>
+            <ColorRow
+              label="Title (this slide)"
+              value={selected.titleColor ?? state.settings.titleColor}
+              onChange={(v) => updateSlide({ titleColor: v })}
+              onEyedrop={requestEyedrop}
+              presets={["#1a1612", "#0a0a0a", "#3b2a1b", "#ffffff", "#f6f3ec", "#c47c3b"]}
+            />
+            <ColorRow
+              label="Subtitle (this slide)"
+              value={selected.subheadColor ?? state.settings.subheadColor}
+              onChange={(v) => updateSlide({ subheadColor: v })}
+              onEyedrop={requestEyedrop}
+              presets={[
+                "rgba(26,22,18,0.62)",
+                "rgba(26,22,18,0.85)",
+                "rgba(255,255,255,0.72)",
+                "#5b6647",
+                "#c47c3b",
+                "#666666",
+              ]}
+            />
+          </>
+        )}
 
         <Field label="Screenshot">
           <ImageDrop
