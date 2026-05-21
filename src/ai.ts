@@ -43,28 +43,21 @@ export async function generateBackground(prompt: string, byokKey?: string): Prom
   };
 }
 
-// The endpoint still returns a single `pattern`; map it to the fill + shape
-// split the app now uses.
+// The endpoint returns validated/clamped fill + shape params; copy the known
+// keys into a Background patch (light type-guarding; values are already clamped).
 function mapAiParams(raw: unknown): Partial<Background> {
   const p = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const out: Partial<Background> = {};
+  if (p.fill === "solid" || p.fill === "linear" || p.fill === "radial") out.fill = p.fill;
+  if (typeof p.shape === "string") out.shape = p.shape as Background["shape"];
   if (typeof p.color === "string") out.color = p.color;
+  if (typeof p.gradientColor === "string") out.gradientColor = p.gradientColor;
   if (typeof p.accent === "string") out.accent = p.accent;
   if (typeof p.accentOpacity === "number") out.accentOpacity = p.accentOpacity;
   if (typeof p.density === "number") out.density = p.density;
   if (typeof p.ringLayout === "string") out.ringLayout = p.ringLayout;
   if (typeof p.ringCount === "number") out.ringCount = p.ringCount;
+  if (typeof p.gradientAngle === "number") out.gradientAngle = p.gradientAngle;
   if (typeof p.seed === "number") out.seed = p.seed;
-  const pattern = p.pattern;
-  if (pattern === "linear" || pattern === "radial") {
-    out.fill = pattern;
-    out.shape = "none";
-  } else if (pattern === "solid") {
-    out.fill = "solid";
-    out.shape = "none";
-  } else if (typeof pattern === "string") {
-    out.fill = "solid";
-    out.shape = pattern as Background["shape"];
-  }
   return out;
 }
