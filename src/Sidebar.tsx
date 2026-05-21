@@ -241,6 +241,17 @@ export function Sidebar(props: SidebarProps) {
             placeholder="Your headline here"
           />
         </Field>
+        <Field label={`Title size · ${Math.round((state.settings.titleScale ?? 1) * 100)}%`}>
+          <input
+            className="slider"
+            type="range"
+            min="0.5"
+            max="1.5"
+            step="0.05"
+            value={state.settings.titleScale ?? 1}
+            onChange={(e) => updateSettings({ titleScale: parseFloat(e.target.value) })}
+          />
+        </Field>
         <Field label="Subtitle" hint="Wraps to 2 lines automatically.">
           <TextInput
             multiline

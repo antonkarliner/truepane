@@ -56,6 +56,7 @@ export function defaultState(): AppState {
       fontFamily: "Inter",
       customFont: null,
       titleColor: "#1a1612",
+      titleScale: 1,
       subheadColor: "rgba(26,22,18,0.62)",
       subtitleScale: 1,
       background: {

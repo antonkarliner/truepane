@@ -972,13 +972,14 @@ function paintText(
   const font = familyToCss(settings.fontFamily || "Inter");
   ctx.textBaseline = "top";
 
+  const titleScale = settings.titleScale ?? 1;
   ctx.fillStyle = settings.titleColor || "#1a1612";
-  ctx.font = `${T.titleWeight} ${T.titleFontSize}px ${font}`;
+  ctx.font = `${T.titleWeight} ${Math.round(T.titleFontSize * titleScale)}px ${font}`;
   const titleLines = wrapText(ctx, slide.title || "", maxW);
   let y = T.titleTop;
   for (const line of titleLines) {
     ctx.fillText(line, T.leftPad, y);
-    y += T.titleLineHeight;
+    y += Math.round(T.titleLineHeight * titleScale);
   }
   const titleBottom = y;
 
