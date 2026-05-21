@@ -983,13 +983,14 @@ function paintText(
   const titleBottom = y;
 
   if (slide.subhead) {
+    const scale = settings.subtitleScale ?? 1;
     ctx.fillStyle = settings.subheadColor || "rgba(26,22,18,0.62)";
-    ctx.font = `${T.subheadWeight} ${T.subheadFontSize}px ${font}`;
+    ctx.font = `${T.subheadWeight} ${Math.round(T.subheadFontSize * scale)}px ${font}`;
     const subLines = wrapText(ctx, slide.subhead, maxW);
     let sy = Math.max(T.subheadTop, titleBottom + 30);
     for (const line of subLines) {
       ctx.fillText(line, T.leftPad, sy);
-      sy += T.subheadLineHeight;
+      sy += Math.round(T.subheadLineHeight * scale);
     }
   }
 }
