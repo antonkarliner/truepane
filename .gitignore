@@ -34,3 +34,8 @@ misc/
 # Supabase local state
 supabase/.branches/
 supabase/.temp/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
