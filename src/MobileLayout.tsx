@@ -53,6 +53,8 @@ export function MobileLayout(props: MobileLayoutProps) {
   const [activeTab, setActiveTab] = useState<MobileTab>("content");
   const [fullPreview, setFullPreview] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(() => Math.min(window.innerWidth - 32, 380));
+  const [innerHeight, setInnerHeight] = useState(() => window.innerHeight * 0.35);
+  const innerRef = useRef<HTMLDivElement>(null);
 
   const fontFileRef = useRef<HTMLInputElement>(null);
   const jsonFileRef = useRef<HTMLInputElement>(null);
@@ -78,6 +80,18 @@ export function MobileLayout(props: MobileLayoutProps) {
     return () => window.removeEventListener("resize", fn);
   }, []);
 
+  // Track the inner preview container's height so we can scale the slide to
+  // always fit fully — no cropping when the bottom panel is open.
+  useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      setInnerHeight(entries[0].contentRect.height);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const setByok = (v: string) => {
     setByokKey(v);
     try { localStorage.setItem("groq-byok", v); } catch { /* ignore */ }
@@ -87,6 +101,14 @@ export function MobileLayout(props: MobileLayoutProps) {
   const platform = state.settings.platform || "ios";
   const stores: StoreId[] = ["appstore", "playstore"];
   const dim = dimFor(platform);
+
+  // Scale slide to fit within available width AND height — whichever is tighter.
+  // dim.W/dim.H is the slide aspect ratio (portrait ≈ 0.46 for iPhone).
+  const slideAspect = dim.W / dim.H;
+  const displayWidth = Math.max(60, Math.floor(Math.min(
+    previewWidth,
+    (innerHeight - 8) * slideAspect,
+  )));
 
   const hasTextOverride = selected.titleColor !== undefined || selected.subheadColor !== undefined;
   const toggleTextOverride = () => {
@@ -212,6 +234,7 @@ export function MobileLayout(props: MobileLayoutProps) {
           <div className="mobile-eyedrop-hint">Tap slide to pick a color</div>
         )}
         <div
+          ref={innerRef}
           className="mobile-preview__inner"
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
@@ -223,7 +246,7 @@ export function MobileLayout(props: MobileLayoutProps) {
             settings={state.settings}
             slideIndex={selectedIndex}
             totalSlides={totalSlides}
-            displayWidth={previewWidth}
+            displayWidth={displayWidth}
             selected={false}
             onSelect={() => {}}
             onDelete={null}
