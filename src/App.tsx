@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import JSZip from "jszip";
 import { Sidebar } from "./Sidebar";
+import { MobileLayout } from "./MobileLayout";
 import { SlidePreview } from "./components";
 import { dimFor, getFrame, paintSlide, paintStrip } from "./render";
 import { FONT_OPTIONS, STORAGE_KEY, defaultState } from "./constants";
@@ -139,9 +140,23 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Mobile detection
+// ---------------------------------------------------------------------------
+function useMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth <= 768);
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return mobile;
+}
+
+// ---------------------------------------------------------------------------
 // Main App
 // ---------------------------------------------------------------------------
 export function App() {
+  const isMobile = useMobile();
   const [state, setState] = useState<AppState>(() => defaultState());
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
@@ -431,6 +446,37 @@ export function App() {
   // --- Render ----------------------------------------------------------
   if (!hydrated) {
     return <div className="boot">Loading…</div>;
+  }
+
+  if (isMobile) {
+    return (
+      <MobileLayout
+        state={state}
+        selectedIndex={selectedIndex}
+        setSelectedIndex={setSelectedIndex}
+        setFont={setFont}
+        onCustomFont={handleCustomFont}
+        updateSettings={updateSettings}
+        updateBackground={updateBackground}
+        updateSlideBackground={(patch) => updateSlideBackground(selectedIndex, patch)}
+        selected={selected}
+        updateSlide={(patch) => updateSlide(selectedIndex, patch)}
+        deleteSelected={() => deleteSlide(selectedIndex)}
+        moveSelected={(dir) => moveSlide(selectedIndex, selectedIndex + dir)}
+        addSlide={addSlide}
+        exportPng={exportPng}
+        exportStrip={exportStrip}
+        exportZip={exportZip}
+        exportJson={exportJson}
+        importJson={importJson}
+        exporting={exporting}
+        requestEyedrop={requestEyedrop}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        eyedropTarget={eyedropTarget}
+        pickColorFromSlide={pickColorFromSlide}
+      />
+    );
   }
 
   return (
