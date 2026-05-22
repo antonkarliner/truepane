@@ -729,7 +729,7 @@ button { cursor: pointer; font: inherit; }
   /* ── Bottom panel ── */
   .mobile-panel {
     flex: 0 0 auto;
-    height: 50dvh;
+    height: 46dvh;
     display: flex;
     flex-direction: column;
     background: var(--panel);
