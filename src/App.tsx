@@ -1,4 +1,4 @@
-// Main App component for the App Store strip generator.
+// Main App component for Truepane.
 import { useCallback, useEffect, useState } from "react";
 import JSZip from "jszip";
 import { Sidebar } from "./Sidebar";
@@ -366,7 +366,7 @@ export function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "appstore-strip-project.json";
+    a.download = "truepane-project.json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };

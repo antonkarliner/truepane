@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A single-page browser app that generates App Store / Google Play screenshot strips. The user fills in per-slide title/subhead text, drops in app screenshots, picks typography and a generated background, then exports individual slide PNGs, a single horizontal strip, or a ZIP. All work is rendered to `<canvas>` and persists to `localStorage` (key `appstore-generator-v1`). The only backend is an optional Supabase Edge Function powering the AI prompt→style helper (Groq); without it the app is fully functional. It originated as an internal tool for Timer.Coffee and is being modernized and open-sourced (AGPL-3.0); see `README.md` and the migration plan for the broader direction.
+Truepane is a single-page browser app that generates App Store / Google Play screenshot strips. The user fills in per-slide title/subhead text, drops in app screenshots, picks typography and a generated background, then exports individual slide PNGs, a single horizontal strip, or a ZIP. All work is rendered to `<canvas>` and persists to `localStorage` (key `appstore-generator-v1`). The only backend is an optional Supabase Edge Function powering the AI prompt→style helper (Groq); without it the app is fully functional. It originated as an internal tool for Timer.Coffee and is being modernized and open-sourced (AGPL-3.0); see `README.md` and the migration plan for the broader direction.
 
 ## Running it
 

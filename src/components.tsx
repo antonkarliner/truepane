@@ -1,4 +1,4 @@
-// UI components for the App Store strip generator.
+// UI components for Truepane.
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { dimFor, paintSlide } from "./render";
 import type { RingLayout, Settings, Slide } from "./types";
