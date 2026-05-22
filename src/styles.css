@@ -520,3 +520,302 @@ button { cursor: pointer; font: inherit; }
 [data-theme="dark"] .image-drop__clear:hover { background: var(--ink); color: #1e1b22; }
 [data-theme="dark"] .add-card { background: rgba(255,255,255,0.02); }
 [data-theme="dark"] .bg-preset.active { background: rgba(255,255,255,0.06); }
+
+/* ─────────────────────────────────────────────
+   Mobile layout  (≤ 768px)
+   ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+
+  /* Use dvh so the layout accounts for the collapsing address bar */
+  html, body, #root { height: 100dvh; overflow: hidden; }
+
+  .mobile-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* ── Header ── */
+  .mobile-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--rule);
+    flex-shrink: 0;
+  }
+  .mobile-header .brand { flex: 1; }
+  .mobile-header__badge { flex-shrink: 0; }
+
+  /* ── Preview zone ── */
+  .mobile-preview {
+    position: relative;
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: #f4f1ea;
+    background-image: radial-gradient(circle, #c8c2b2 1px, transparent 1px);
+    background-size: 20px 20px;
+    overflow: hidden;
+    padding: 12px 0 6px;
+    gap: 8px;
+  }
+  .mobile-preview--full {
+    flex: 1 1 100%;
+    padding: 0;
+    gap: 0;
+  }
+
+  .mobile-preview__inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 0;
+    min-height: 0;
+    width: 100%;
+  }
+  .mobile-preview--full .mobile-preview__inner {
+    flex: 1;
+    cursor: pointer;
+  }
+
+  /* Strip the white card chrome from the preview in mobile — it's just a canvas */
+  .mobile-preview .slide-card {
+    background: transparent;
+    padding: 0;
+    box-shadow: none;
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: default;
+    /* don't lift on hover */
+    transform: none !important;
+  }
+  .mobile-preview .slide-card.selected { outline: none; }
+  .mobile-preview .slide-card__index,
+  .mobile-preview .slide-card__delete { display: none; }
+
+  /* Eyedrop mode hint */
+  .mobile-eyedrop-hint {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(26,22,18,0.75);
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 30;
+  }
+
+  /* Full-preview toggle button */
+  .mobile-full-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--rule-strong);
+    background: rgba(246,243,236,0.85);
+    color: var(--ink);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    z-index: 20;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+
+  /* Dimension badge */
+  .mobile-dim-badge {
+    font-family: "Roboto Mono", ui-monospace, monospace;
+    font-size: 9.5px;
+    color: var(--dim);
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+  }
+
+  /* Full-preview tap hint */
+  .mobile-full-hint {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(26,22,18,0.55);
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  /* ── Slide navigation row ── */
+  .mobile-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 0 6px;
+  }
+  .mobile-nav__arrow {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--rule-strong);
+    background: var(--panel);
+    color: var(--ink);
+    font-size: 20px;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .mobile-nav__arrow:disabled { opacity: 0.3; cursor: default; }
+  .mobile-nav__add {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1.5px dashed var(--rule-strong);
+    background: transparent;
+    color: var(--dim);
+    font-size: 18px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: 4px;
+  }
+  .mobile-nav__add:hover { border-color: var(--ink); color: var(--ink); }
+
+  /* Slide indicator dots */
+  .mobile-dots {
+    display: flex;
+    flex: 1;
+    gap: 5px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 4px 0;
+  }
+  .mobile-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    border: 0;
+    padding: 0;
+    background: rgba(26,22,18,0.18);
+    cursor: pointer;
+    transition: transform 0.15s, background 0.15s;
+    /* larger tap target via box-shadow trick */
+    box-shadow: 0 0 0 8px transparent;
+  }
+  .mobile-dot.active {
+    background: var(--ink);
+    transform: scale(1.4);
+  }
+  .mobile-dot:hover:not(.active) { background: rgba(26,22,18,0.38); }
+
+  /* ── Bottom panel ── */
+  .mobile-panel {
+    flex: 0 0 auto;
+    height: 50dvh;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border-top: 1px solid var(--rule);
+  }
+
+  /* ── Tab bar ── */
+  .mobile-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--rule);
+    flex-shrink: 0;
+  }
+  .mobile-tab {
+    flex: 1;
+    padding: 11px 4px;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--dim);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  .mobile-tab.active {
+    color: var(--ink);
+    border-bottom-color: var(--ink);
+  }
+
+  /* ── Panel body ── */
+  .mobile-panel__body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px 18px 28px;
+  }
+  /* bottom safe area for devices with home indicator */
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .mobile-panel__body {
+      padding-bottom: calc(28px + env(safe-area-inset-bottom));
+    }
+  }
+
+  /* Platform section in content tab */
+  .mobile-device-section {
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .mobile-device-section .device-group { margin-bottom: 8px; }
+  .mobile-device-section .segmented { display: flex; width: 100%; }
+  .mobile-device-section .segmented__btn { flex: 1; text-align: center; }
+
+  /* Add slide button in content tab */
+  .mobile-add-slide {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 10px 14px;
+    border: 1.5px dashed var(--rule-strong);
+    border-radius: 10px;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    color: var(--dim);
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .mobile-add-slide:hover { border-color: var(--ink); color: var(--ink); }
+
+  /* Export buttons: full width on mobile */
+  .mobile-panel__body .export-grid { grid-template-columns: 1fr; }
+
+}
+
+/* Dark mode — mobile overrides */
+[data-theme="dark"] .mobile-preview {
+  background-color: #1e1b22;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.12) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+[data-theme="dark"] .mobile-full-btn {
+  background: rgba(39,35,48,0.88);
+}
