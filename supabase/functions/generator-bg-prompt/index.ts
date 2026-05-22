@@ -1,4 +1,4 @@
-// Edge function for the App Store Strip Generator: turns a short text prompt
+// Edge function for Truepane: turns a short text prompt
 // into validated background-style parameters via Groq, returning ONLY a
 // schema-checked, clamped object (raw model output never reaches the client
 // renderer). Self-contained on purpose — no shared imports — so it can live in

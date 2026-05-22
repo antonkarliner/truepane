@@ -1,7 +1,7 @@
-# App Store Strip Generator
+# Truepane
 
-A small, fast, browser-based tool for generating App Store / Google Play screenshot
-strips — title + subhead text, a device frame, your screenshot, and a generated
+**Truepane** is a small, fast, browser-based app screenshot generator for the App Store
+and Google Play — title + subhead text, a device frame, your screenshot, and a generated
 background, exported as individual PNGs, a horizontal strip, or a ZIP.
 
 Everything renders to `<canvas>` in the browser. No screenshots are ever uploaded to

@@ -1,4 +1,4 @@
-// Shared types for the App Store strip generator.
+// Shared types for Truepane.
 
 export interface RoundRect {
   x: number;
