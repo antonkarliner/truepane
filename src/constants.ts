@@ -1,6 +1,37 @@
-import type { AppState, FontOption } from "./types";
+import type { AppState, FontOption, LanguageTarget } from "./types";
 
 export const STORAGE_KEY = "appstore-generator-v1";
+
+// Common App Store / Google Play storefront locales for the AI translate feature.
+// `code` is used for ZIP folder names and as the translations map key; `name` is
+// the human label sent to the model. Users can also add a custom language.
+export const TRANSLATE_LANGUAGES: LanguageTarget[] = [
+  { code: "es", name: "Spanish" },
+  { code: "es-MX", name: "Spanish (Mexico)" },
+  { code: "fr", name: "French" },
+  { code: "de", name: "German" },
+  { code: "it", name: "Italian" },
+  { code: "pt-BR", name: "Brazilian Portuguese" },
+  { code: "pt-PT", name: "Portuguese (Portugal)" },
+  { code: "nl", name: "Dutch" },
+  { code: "sv", name: "Swedish" },
+  { code: "da", name: "Danish" },
+  { code: "no", name: "Norwegian" },
+  { code: "fi", name: "Finnish" },
+  { code: "pl", name: "Polish" },
+  { code: "tr", name: "Turkish" },
+  { code: "ru", name: "Russian" },
+  { code: "uk", name: "Ukrainian" },
+  { code: "ja", name: "Japanese" },
+  { code: "ko", name: "Korean" },
+  { code: "zh-Hans", name: "Simplified Chinese" },
+  { code: "zh-Hant", name: "Traditional Chinese" },
+  { code: "ar", name: "Arabic" },
+  { code: "hi", name: "Hindi" },
+  { code: "id", name: "Indonesian" },
+  { code: "th", name: "Thai" },
+  { code: "vi", name: "Vietnamese" },
+];
 
 export const DEFAULT_SLIDES: { title: string; subhead: string }[] = [
   { title: "Your Headline Here", subhead: "A short, benefit-driven subhead for this screen." },
