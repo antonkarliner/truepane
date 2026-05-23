@@ -6,7 +6,7 @@ import { MobileLayout } from "./MobileLayout";
 import { SlidePreview } from "./components";
 import { dimFor, getFrame, paintSlide, paintStrip } from "./render";
 import { FONT_OPTIONS, STORAGE_KEY, defaultState } from "./constants";
-import type { AppState, Background, Settings, Slide } from "./types";
+import type { AppState, Background, Settings, Slide, SlideText } from "./types";
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -48,12 +48,30 @@ function loadState(): AppState {
         image: null,
         imageDataUrl: sl.imageDataUrl || null,
         background: sl.background ? normalizeBackground(sl.background) : undefined,
+        translations: normalizeTranslations(sl.translations),
       }));
     }
     return s;
   } catch {
     return defaultState();
   }
+}
+
+// Light guard for persisted/imported per-language translations: keep only an
+// object of { title, subhead } string pairs; drop anything malformed.
+function normalizeTranslations(raw: unknown): Record<string, SlideText> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, SlideText> = {};
+  for (const [code, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (v && typeof v === "object") {
+      const t = v as Record<string, unknown>;
+      out[code] = {
+        title: typeof t.title === "string" ? t.title : "",
+        subhead: typeof t.subhead === "string" ? t.subhead : "",
+      };
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function persistState(state: AppState): void {
@@ -65,12 +83,28 @@ function persistState(state: AppState): void {
         subhead: s.subhead,
         imageDataUrl: s.imageDataUrl || null,
         background: s.background,
+        translations: s.translations,
       })),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch (e) {
     console.warn("persist failed", e);
   }
+}
+
+// Return the slide with its title/subhead swapped to the active language's
+// translation. `lang === ""` is the source; any blank translated field falls
+// back to the source so untranslated slides still render. Render code reads
+// slide.title/subhead, so this keeps render.ts language-agnostic.
+function resolveSlide(slide: Slide, lang: string): Slide {
+  if (!lang) return slide;
+  const t = slide.translations?.[lang];
+  if (!t) return slide;
+  return {
+    ...slide,
+    title: t.title?.trim() ? t.title : slide.title,
+    subhead: t.subhead?.trim() ? t.subhead : slide.subhead,
+  };
 }
 
 // Convert imageDataUrl strings back to HTMLImageElements for rendering.
@@ -161,9 +195,11 @@ export function App() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [, setFontsReady] = useState(0); // bump to trigger rerender on font load
-  const [exporting, setExporting] = useState<null | "png" | "strip" | "zip">(null);
+  const [exporting, setExporting] = useState<null | "png" | "strip" | "zip" | "all">(null);
   const [eyedropTarget, setEyedropTarget] = useState<((hex: string) => void) | null>(null);
   const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
+  // Active preview/edit language: "" = source, otherwise a LanguageTarget.code.
+  const [activeLang, setActiveLang] = useState("");
 
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
@@ -235,6 +271,39 @@ export function App() {
     },
     [],
   );
+
+  // Write a partial translation for one slide/language, seeding from the source
+  // text so a half-edited pair never loses the untouched field.
+  const updateSlideTranslation = useCallback(
+    (idx: number, lang: string, patch: Partial<SlideText>) => {
+      if (!lang) return;
+      setState((s) => {
+        const next = s.slides.slice();
+        const slide = next[idx];
+        const current = slide.translations?.[lang] ?? { title: slide.title, subhead: slide.subhead };
+        next[idx] = {
+          ...slide,
+          translations: { ...slide.translations, [lang]: { ...current, ...patch } },
+        };
+        return { ...s, slides: next };
+      });
+    },
+    [],
+  );
+
+  // Batch-apply a generated translation set (aligned to slide order) for one
+  // language across all slides.
+  const applyTranslations = useCallback((lang: string, items: SlideText[]) => {
+    if (!lang) return;
+    setState((s) => {
+      const next = s.slides.map((slide, i) =>
+        i < items.length
+          ? { ...slide, translations: { ...slide.translations, [lang]: items[i] } }
+          : slide,
+      );
+      return { ...s, slides: next };
+    });
+  }, []);
 
   const addSlide = useCallback(() => {
     setState((s) => {
@@ -320,23 +389,32 @@ export function App() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  // Stable filename slug from the SOURCE title so files line up across languages.
+  const slideSlug = (slide: Slide, i: number) =>
+    (slide.title || `slide-${i + 1}`).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  // Filename tag for the active language ("" = source, no tag).
+  const langTag = () => (activeLang ? `${activeLang}-` : "");
+
   const exportPng = async () => {
     setExporting("png");
     const slide = state.slides[selectedIndex];
     const c = document.createElement("canvas");
-    await paintSlide(c, slide, state.settings, selectedIndex, totalSlides);
-    const safe = (slide.title || `slide-${selectedIndex + 1}`).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    await paintSlide(c, resolveSlide(slide, activeLang), state.settings, selectedIndex, totalSlides);
+    const safe = slideSlug(slide, selectedIndex);
     const platformPrefix = slidePrefix();
-    await downloadCanvas(c, `${platformPrefix}-${String(selectedIndex + 1).padStart(2, "0")}-${safe}.png`);
+    await downloadCanvas(
+      c,
+      `${platformPrefix}-${langTag()}${String(selectedIndex + 1).padStart(2, "0")}-${safe}.png`,
+    );
     setExporting(null);
   };
 
   const exportStrip = async () => {
     setExporting("strip");
     const c = document.createElement("canvas");
-    await paintStrip(c, state.slides, state.settings);
+    await paintStrip(c, state.slides.map((s) => resolveSlide(s, activeLang)), state.settings);
     const platformPrefix = stripPrefix();
-    await downloadCanvas(c, `${platformPrefix}-strip-${totalSlides}x.png`);
+    await downloadCanvas(c, `${platformPrefix}-${langTag()}strip-${totalSlides}x.png`);
     setExporting(null);
   };
 
@@ -347,20 +425,53 @@ export function App() {
     for (let i = 0; i < state.slides.length; i++) {
       const slide = state.slides[i];
       const c = document.createElement("canvas");
-      await paintSlide(c, slide, state.settings, i, totalSlides);
+      await paintSlide(c, resolveSlide(slide, activeLang), state.settings, i, totalSlides);
       const blob = await new Promise<Blob>((res) => c.toBlob((b) => res(b!), "image/png"));
-      const safe = (slide.title || `slide-${i + 1}`).toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      zip.file(`${platformPrefix}-${String(i + 1).padStart(2, "0")}-${safe}.png`, blob);
+      zip.file(`${platformPrefix}-${langTag()}${String(i + 1).padStart(2, "0")}-${slideSlug(slide, i)}.png`, blob);
     }
     const stripCanvas = document.createElement("canvas");
-    await paintStrip(stripCanvas, state.slides, state.settings);
+    await paintStrip(stripCanvas, state.slides.map((s) => resolveSlide(s, activeLang)), state.settings);
     const stripBlob = await new Promise<Blob>((res) => stripCanvas.toBlob((b) => res(b!), "image/png"));
-    zip.file(`${platformPrefix}-strip-${totalSlides}x.png`, stripBlob);
+    zip.file(`${platformPrefix}-${langTag()}strip-${totalSlides}x.png`, stripBlob);
     const out = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(out);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${platformPrefix}-strip-${totalSlides}slides.zip`;
+    a.download = `${platformPrefix}-${langTag()}strip-${totalSlides}slides.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    setExporting(null);
+  };
+
+  // One ZIP with a subfolder per language (source/, es/, pt-BR/, …), each holding
+  // that language's slide PNGs + strip.
+  const exportAllLanguages = async () => {
+    setExporting("all");
+    const zip = new JSZip();
+    const platformPrefix = slidePrefix();
+    const langs: { code: string; folder: string }[] = [
+      { code: "", folder: "source" },
+      ...(state.settings.languages ?? []).map((l) => ({ code: l.code, folder: l.code })),
+    ];
+    for (const { code, folder } of langs) {
+      const dir = zip.folder(folder)!;
+      for (let i = 0; i < state.slides.length; i++) {
+        const slide = state.slides[i];
+        const c = document.createElement("canvas");
+        await paintSlide(c, resolveSlide(slide, code), state.settings, i, totalSlides);
+        const blob = await new Promise<Blob>((res) => c.toBlob((b) => res(b!), "image/png"));
+        dir.file(`${platformPrefix}-${String(i + 1).padStart(2, "0")}-${slideSlug(slide, i)}.png`, blob);
+      }
+      const stripCanvas = document.createElement("canvas");
+      await paintStrip(stripCanvas, state.slides.map((s) => resolveSlide(s, code)), state.settings);
+      const stripBlob = await new Promise<Blob>((res) => stripCanvas.toBlob((b) => res(b!), "image/png"));
+      dir.file(`${platformPrefix}-strip-${totalSlides}x.png`, stripBlob);
+    }
+    const out = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(out);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${platformPrefix}-all-languages.zip`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
     setExporting(null);
@@ -375,6 +486,7 @@ export function App() {
         subhead: s.subhead,
         imageDataUrl: s.imageDataUrl || null,
         background: s.background,
+        translations: s.translations,
       })),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -399,6 +511,7 @@ export function App() {
         image: null,
         imageDataUrl: sl.imageDataUrl || null,
         background: sl.background ? normalizeBackground(sl.background) : undefined,
+        translations: normalizeTranslations(sl.translations),
       }));
     }
     const slides = await hydrateImages(s.slides);
@@ -493,9 +606,14 @@ export function App() {
         updateSlideBackground={(patch) => updateSlideBackground(selectedIndex, patch)}
         deleteSelected={() => deleteSlide(selectedIndex)}
         moveSelected={(dir) => moveSlide(selectedIndex, selectedIndex + dir)}
+        activeLang={activeLang}
+        setActiveLang={setActiveLang}
+        updateSlideTranslation={(lang, patch) => updateSlideTranslation(selectedIndex, lang, patch)}
+        applyTranslations={applyTranslations}
         exportPng={exportPng}
         exportStrip={exportStrip}
         exportZip={exportZip}
+        exportAllLanguages={exportAllLanguages}
         exportJson={exportJson}
         importJson={importJson}
         exporting={exporting}
@@ -524,7 +642,7 @@ export function App() {
           {state.slides.map((slide, i) => (
             <SlidePreview
               key={i}
-              slide={slide}
+              slide={resolveSlide(slide, activeLang)}
               settings={state.settings}
               slideIndex={i}
               totalSlides={totalSlides}

@@ -5,9 +5,19 @@ import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimFor } from ".
 import { accentSuggestions, extractPalette } from "./palette";
 
 const DEFAULT_SHAPE_PRESETS = ["#c47c3b", "#1a1612", "#5b6647", "#c4523b", "#5b6cff", "#8a6f4f"];
-import { aiConfigured, generateBackground, type AiProvider } from "./ai";
-import { BG_PRESETS, FONT_OPTIONS } from "./constants";
-import type { AppState, Background, BackgroundFill, ShapeKind, Settings, Slide, StoreId } from "./types";
+import { aiConfigured, generateBackground, translateConfigured, translateSlides, type AiProvider } from "./ai";
+import { BG_PRESETS, FONT_OPTIONS, TRANSLATE_LANGUAGES } from "./constants";
+import type {
+  AppState,
+  Background,
+  BackgroundFill,
+  LanguageTarget,
+  ShapeKind,
+  Settings,
+  Slide,
+  SlideText,
+  StoreId,
+} from "./types";
 
 const STORE_LABELS: Record<StoreId, string> = {
   appstore: "App Store",
@@ -26,9 +36,14 @@ interface SidebarProps {
   updateSlide: (patch: Partial<Slide>) => void;
   deleteSelected: () => void;
   moveSelected: (dir: number) => void;
+  activeLang: string;
+  setActiveLang: (lang: string) => void;
+  updateSlideTranslation: (lang: string, patch: Partial<SlideText>) => void;
+  applyTranslations: (lang: string, items: SlideText[]) => void;
   exportPng: () => void;
   exportStrip: () => void;
   exportZip: () => void;
+  exportAllLanguages: () => void;
   exportJson: () => void;
   importJson: (file: File) => void;
   exporting: string | null;
@@ -50,9 +65,14 @@ export function Sidebar(props: SidebarProps) {
     updateSlide,
     deleteSelected,
     moveSelected,
+    activeLang,
+    setActiveLang,
+    updateSlideTranslation,
+    applyTranslations,
     exportPng,
     exportStrip,
     exportZip,
+    exportAllLanguages,
     exportJson,
     importJson,
     exporting,
@@ -121,6 +141,80 @@ export function Sidebar(props: SidebarProps) {
       setAiBusy(false);
     }
   };
+
+  // --- Translation ----------------------------------------------------
+  const languages = state.settings.languages ?? [];
+  const [showTranslate, setShowTranslate] = useState(false);
+  const [trBusy, setTrBusy] = useState(false);
+  const [trError, setTrError] = useState<string | null>(null);
+  const [trNote, setTrNote] = useState<string | null>(null);
+  const [pickLang, setPickLang] = useState("");
+  const [customLang, setCustomLang] = useState("");
+
+  const langName = (code: string) =>
+    languages.find((l) => l.code === code)?.name ??
+    TRANSLATE_LANGUAGES.find((l) => l.code === code)?.name ??
+    code;
+
+  const addLanguage = (target: LanguageTarget) => {
+    if (!target.code || languages.some((l) => l.code === target.code)) return;
+    updateSettings({ languages: [...languages, target] });
+  };
+  const addPicked = () => {
+    const found = TRANSLATE_LANGUAGES.find((l) => l.code === pickLang);
+    if (found) addLanguage(found);
+    setPickLang("");
+  };
+  const addCustom = () => {
+    const name = customLang.trim();
+    if (!name) return;
+    const code = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || `lang-${languages.length + 1}`;
+    addLanguage({ code, name });
+    setCustomLang("");
+  };
+  const removeLanguage = (code: string) => {
+    updateSettings({ languages: languages.filter((l) => l.code !== code) });
+    if (activeLang === code) setActiveLang("");
+  };
+
+  const runTranslate = async () => {
+    if (!languages.length || trBusy) return;
+    setTrBusy(true);
+    setTrError(null);
+    setTrNote(null);
+    const sourceItems: SlideText[] = state.slides.map((s) => ({ title: s.title, subhead: s.subhead }));
+    const context = state.settings.translationContext ?? "";
+    const byok = aiProvider === "groq" ? byokKey || undefined : undefined;
+    const failures: string[] = [];
+    let firstOk = "";
+    for (const lang of languages) {
+      try {
+        const { items, note } = await translateSlides(sourceItems, lang.name, context, aiProvider, byok);
+        applyTranslations(lang.code, items);
+        if (!firstOk) {
+          firstOk = lang.code;
+          if (note) setTrNote(note);
+        }
+      } catch (e) {
+        failures.push(`${lang.name}: ${e instanceof Error ? e.message : "failed"}`);
+      }
+    }
+    if (failures.length) setTrError(failures.join(" · "));
+    if (firstOk) setActiveLang(firstOk);
+    setTrBusy(false);
+  };
+
+  // Title/subhead the text fields edit: the active language's translation
+  // (falling back to source as a starting point) or the source itself.
+  const editTitle = activeLang ? selected.translations?.[activeLang]?.title ?? selected.title : selected.title;
+  const editSubhead = activeLang
+    ? selected.translations?.[activeLang]?.subhead ?? selected.subhead
+    : selected.subhead;
+  const onTitleChange = (v: string) =>
+    activeLang ? updateSlideTranslation(activeLang, { title: v }) : updateSlide({ title: v });
+  const onSubheadChange = (v: string) =>
+    activeLang ? updateSlideTranslation(activeLang, { subhead: v }) : updateSlide({ subhead: v });
+  const availableLangs = TRANSLATE_LANGUAGES.filter((l) => !languages.some((x) => x.code === l.code));
 
   const setSlideImage = (img: HTMLImageElement, dataUrl: string) => {
     updateSlide({ image: img, imageDataUrl: dataUrl });
@@ -246,12 +340,24 @@ export function Sidebar(props: SidebarProps) {
           </span>
         </div>
 
-        <Field label="Title">
-          <TextInput
-            value={selected.title}
-            onChange={(v) => updateSlide({ title: v })}
-            placeholder="Your headline here"
-          />
+        {languages.length > 0 && (
+          <Field label="Editing language" hint={activeLang ? "Source text shown below each field." : undefined}>
+            <select className="text-input" value={activeLang} onChange={(e) => setActiveLang(e.target.value)}>
+              <option value="">Source</option>
+              {languages.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        <Field
+          label={activeLang ? `Title · ${langName(activeLang)}` : "Title"}
+          hint={activeLang ? `Source: ${selected.title || "—"}` : undefined}
+        >
+          <TextInput value={editTitle} onChange={onTitleChange} placeholder="Your headline here" />
         </Field>
         <Field label={`Title size · ${Math.round((state.settings.titleScale ?? 1) * 100)}%`}>
           <input
@@ -264,11 +370,14 @@ export function Sidebar(props: SidebarProps) {
             onChange={(e) => updateSettings({ titleScale: parseFloat(e.target.value) })}
           />
         </Field>
-        <Field label="Subtitle" hint="Wraps to 2 lines automatically.">
+        <Field
+          label={activeLang ? `Subtitle · ${langName(activeLang)}` : "Subtitle"}
+          hint={activeLang ? `Source: ${selected.subhead || "—"}` : "Wraps to 2 lines automatically."}
+        >
           <TextInput
             multiline
-            value={selected.subhead}
-            onChange={(v) => updateSlide({ subhead: v })}
+            value={editSubhead}
+            onChange={onSubheadChange}
             placeholder="A short, benefit-driven subtitle."
           />
         </Field>
@@ -400,6 +509,120 @@ export function Sidebar(props: SidebarProps) {
           </button>
         </div>
       </section>
+
+      {translateConfigured && (
+        <section className="panel">
+          <button className="disclosure" onClick={() => setShowTranslate((s) => !s)}>
+            <span>{showTranslate ? "▾" : "▸"}</span> Translate
+            {languages.length > 0 && <span className="disclosure__count">{languages.length}</span>}
+          </button>
+          {showTranslate && (
+            <>
+              <Field
+                label="Target languages"
+                hint="Localize every slide's title + subtitle. CJK/Arabic need a matching font (e.g. a Noto family)."
+              >
+                <div className="lang-add">
+                  <select className="text-input" value={pickLang} onChange={(e) => setPickLang(e.target.value)}>
+                    <option value="">Choose a language…</option>
+                    {availableLangs.map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="ghost small" disabled={!pickLang} onClick={addPicked}>
+                    Add
+                  </button>
+                </div>
+                <div className="lang-add">
+                  <input
+                    className="text-input"
+                    value={customLang}
+                    placeholder="Custom language…"
+                    onChange={(e) => setCustomLang(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addCustom();
+                      }
+                    }}
+                  />
+                  <button className="ghost small" disabled={!customLang.trim()} onClick={addCustom}>
+                    Add
+                  </button>
+                </div>
+              </Field>
+
+              {languages.length > 0 && (
+                <div className="lang-chips">
+                  {languages.map((l) => (
+                    <span key={l.code} className="lang-chip">
+                      {l.name}
+                      <button
+                        className="lang-chip__x"
+                        title={`Remove ${l.name}`}
+                        onClick={() => removeLanguage(l.code)}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <Field label="Context note" hint="Optional. App name, audience, tone, terms to keep untranslated.">
+                <TextInput
+                  multiline
+                  value={state.settings.translationContext ?? ""}
+                  onChange={(v) => updateSettings({ translationContext: v })}
+                  placeholder="e.g. A calm meditation app. Keep the brand name 'Truepane'."
+                />
+              </Field>
+
+              <Field label="Generate with AI">
+                <Segmented
+                  value={aiProvider}
+                  onChange={(v) => setAiProvider(v as AiProvider)}
+                  options={[
+                    { value: "cerebras", label: "Cerebras 120B" },
+                    { value: "groq", label: "Groq 70B" },
+                  ]}
+                />
+                <button
+                  className="ghost small upload-btn"
+                  disabled={trBusy || languages.length === 0}
+                  onClick={runTranslate}
+                >
+                  {trBusy ? "Translating…" : `Generate translations (${languages.length})`}
+                </button>
+                {aiProvider === "groq" && (
+                  <>
+                    <button className="ghost small upload-btn" onClick={() => setShowByok((s) => !s)}>
+                      {showByok ? "Hide key field" : "Use my own Groq key"}
+                    </button>
+                    {showByok && (
+                      <input
+                        className="text-input"
+                        type="password"
+                        placeholder="gsk_… (stored in this browser only)"
+                        value={byokKey}
+                        onChange={(e) => setByok(e.target.value)}
+                      />
+                    )}
+                  </>
+                )}
+                {trError && (
+                  <div className="field__hint" style={{ color: "#c4523b" }}>
+                    {trError}
+                  </div>
+                )}
+                {trNote && !trError && <div className="ai-note">"{trNote}"</div>}
+              </Field>
+            </>
+          )}
+        </section>
+      )}
 
       <section className="panel">
         <div className="panel__title">Background</div>
@@ -652,6 +875,11 @@ export function Sidebar(props: SidebarProps) {
           <button className="primary" disabled={!!exporting} onClick={exportZip}>
             {exporting === "zip" ? "Zipping…" : "Download ZIP (all slides + strip)"}
           </button>
+          {languages.length > 0 && (
+            <button className="primary" disabled={!!exporting} onClick={exportAllLanguages}>
+              {exporting === "all" ? "Zipping…" : `Download all languages (ZIP · ${languages.length + 1})`}
+            </button>
+          )}
         </div>
         <div className="export-row">
           <button className="ghost small" onClick={exportJson}>

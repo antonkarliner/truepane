@@ -118,6 +118,20 @@ export interface CustomFont {
   dataUrl: string;
 }
 
+// A title/subhead pair. The base text lives on the slide directly; per-language
+// translations are stored as a map of these keyed by language code.
+export interface SlideText {
+  title: string;
+  subhead: string;
+}
+
+// A target language for AI translation. `code` is used for ZIP folder names and
+// as the key into `Slide.translations`; `name` is the human label sent to the AI.
+export interface LanguageTarget {
+  code: string;
+  name: string;
+}
+
 export interface Settings {
   platform: string;
   fontFamily: string;
@@ -127,6 +141,8 @@ export interface Settings {
   subheadColor: string;
   subtitleScale: number;
   background: Background;
+  languages?: LanguageTarget[];
+  translationContext?: string;
 }
 
 export interface Slide {
@@ -137,6 +153,7 @@ export interface Slide {
   background?: Background;
   titleColor?: string;
   subheadColor?: string;
+  translations?: Record<string, SlideText>;
 }
 
 export interface AppState {
