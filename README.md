@@ -184,7 +184,10 @@ from a repo checkout instead (for development), point the client's command at
    versa).
 
 Google Fonts are fetched on demand and cached in `~/.cache/truepane/fonts` (Inter is
-bundled, so offline rendering works out of the box). For non-Latin target languages,
+bundled, so offline rendering works out of the box). The `-apple-system` font renders
+as real San Francisco on macOS — from your own installed system font, which is never
+bundled or redistributed (Apple's font is proprietary) — and falls back to Inter on
+Linux/CI. For non-Latin target languages,
 pick a font that covers the script (Inter covers Cyrillic/Greek; `Noto Sans JP/KR/SC`
 for CJK; `Noto Sans Arabic` for Arabic, which is shaped and laid out right-to-left
 automatically) — unlike browsers, server-side rendering has no per-glyph system-font
