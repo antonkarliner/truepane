@@ -178,7 +178,10 @@ from a repo checkout instead (for development), point the client's command at
    subfolders (`source/`, `es/`, …), matching the web app's all-languages ZIP. A
    locale can also carry its **own screenshots** (for apps whose UI is itself
    localized): pass `screenshot_path` per slide here, or `set_screenshots` with a
-   `language`; a locale without its own screenshot reuses the base one.
+   `language`; a locale without its own screenshot reuses the base one. Each
+   language can render in its **own font** too (`font` here, or `set_style` with a
+   `language`) — e.g. San Francisco for the base and `Noto Sans Arabic` for `ar` —
+   since the server has no per-glyph fallback for scripts a font doesn't cover.
 6. `export_project` / `load_project` — round-trip the project JSON with the web
    app's Import/Export Project, so a human can fine-tune the agent's work (or vice
    versa).
