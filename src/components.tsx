@@ -1,7 +1,7 @@
 // UI components for Truepane.
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { dimFor, paintSlide } from "./render";
-import type { RingLayout, Settings, Slide } from "./types";
+import { dimFor, paintSlide } from "./core/render";
+import type { RingLayout, Settings, Slide } from "./core/types";
 
 declare global {
   interface Window {

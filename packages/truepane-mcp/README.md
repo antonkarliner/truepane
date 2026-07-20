@@ -1,0 +1,64 @@
+# truepane-mcp
+
+A local [MCP](https://modelcontextprotocol.io) server for
+[Truepane](https://github.com/antonkarliner/truepane). It lets an AI agent
+(Claude Code, Codex, …) take raw app screenshots — e.g. captured from a
+simulator — and turn them into store-ready App Store / Google Play slides:
+procedural device frames at exact store resolutions, generated backgrounds,
+typography, and per-language localization.
+
+Everything runs locally. It renders with a native canvas
+(`@napi-rs/canvas`): screenshots are read from local file paths and PNGs are
+written to local file paths — nothing is uploaded anywhere. **No configuration
+or API keys are needed.** The agent is itself the language model, so styling and
+translation are its own judgment calls.
+
+## Install
+
+Add it to Claude Code (no checkout required):
+
+```sh
+claude mcp add truepane -- npx -y truepane-mcp
+```
+
+Or run the binary directly:
+
+```sh
+npx -y truepane-mcp        # stdio MCP server
+```
+
+Requires Node ≥ 18.
+
+## Workflow the tools expect
+
+1. **`list_options`** — discover platforms (with exact store pixel sizes),
+   fonts, background fills, and shapes.
+2. **`create_project`** — slide titles/subheads plus absolute screenshot file
+   paths.
+3. **`set_style`** — colors, background, and typography, chosen with the agent's
+   own design judgment. `suggest_palette_from_screenshot` extracts an accent +
+   background tint from a screenshot with pure local math if a starting point
+   helps.
+4. **`render`** — writes full-resolution PNGs (e.g. iPhone 6.9″ = 1320×2868)
+   into an output directory you pass, and returns a small inline preview to
+   inspect. Adjust and re-render until it looks right.
+5. **`set_translations`** — the agent translates the slide texts itself and
+   stores the results per language; then `render` with `language: "all"` writes
+   per-language subfolders (`source/`, `es/`, …).
+6. **`export_project`** / **`load_project`** — round-trip the project JSON with
+   the Truepane web app's Import/Export Project, so a human can fine-tune the
+   agent's work (or vice versa).
+
+## Fonts
+
+Google Fonts are fetched on demand and cached in `~/.cache/truepane/fonts`
+(Inter is bundled, so offline rendering works out of the box). For non-Latin
+target languages, pick a font that covers the script (Inter covers
+Cyrillic/Greek; Noto Sans JP/KR for CJK) — unlike browsers, server-side
+rendering has no per-glyph system-font fallback.
+
+## License
+
+[AGPL-3.0](LICENSE). Part of the Truepane project; see the
+[main repository](https://github.com/antonkarliner/truepane) for the web app
+and full documentation.

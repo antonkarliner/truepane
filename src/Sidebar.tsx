@@ -1,12 +1,12 @@
 // Sidebar component — all controls for Truepane.
 import { useRef, useState } from "react";
 import { ColorRow, Field, ImageDrop, LayoutSlider, Segmented, TextInput } from "./components";
-import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimFor } from "./render";
+import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimFor } from "./core/render";
 import { accentSuggestions, extractPalette } from "./palette";
 
 const DEFAULT_SHAPE_PRESETS = ["#c47c3b", "#1a1612", "#5b6647", "#c4523b", "#5b6cff", "#8a6f4f"];
 import { aiConfigured, generateBackground, translateConfigured, translateSlides, type AiProvider } from "./ai";
-import { BG_PRESETS, FONT_OPTIONS, TRANSLATE_LANGUAGES } from "./constants";
+import { BG_PRESETS, FONT_OPTIONS, TRANSLATE_LANGUAGES } from "./core/constants";
 import type {
   AppState,
   Background,
@@ -17,7 +17,7 @@ import type {
   Slide,
   SlideText,
   StoreId,
-} from "./types";
+} from "./core/types";
 
 const STORE_LABELS: Record<StoreId, string> = {
   appstore: "App Store",
