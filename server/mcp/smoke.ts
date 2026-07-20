@@ -225,6 +225,24 @@ async function main(): Promise<void> {
       "es/slide-02 should differ from source once the es locale has its own screenshot",
     );
 
+    // 7c) per-language font override: render es in a different font (Bricolage,
+    // already registered) than the global Inter. Only the font changes, so the
+    // es slide must differ from its Inter render — proving set_style { language }.
+    await client.callTool({
+      name: "set_style",
+      arguments: { project_id: "smoke", language: "es", fontFamily: "Bricolage Grotesque" },
+    });
+    const esFontDir = path.join(outDir, "es-font");
+    await client.callTool({
+      name: "render",
+      arguments: { project_id: "smoke", output_dir: esFontDir, what: "slides", scale: 0.5, language: "es" },
+    });
+    assert.notDeepEqual(
+      fs.readFileSync(path.join(esFontDir, "slide-01.png")),
+      fs.readFileSync(path.join(i18nDir, "es", "slide-01.png")),
+      "es/slide-01 should change when the es locale gets its own font override",
+    );
+
     // 8) export → load round-trip preserves screenshots AND translations
     const projFile = path.join(tmp, "truepane-project.json");
     await client.callTool({ name: "export_project", arguments: { project_id: "smoke", path: projFile } });
@@ -244,9 +262,10 @@ async function main(): Promise<void> {
     assert.deepEqual(
       parsed.settings.languages,
       [
-        { code: "es", name: "Spanish" },
+        { code: "es", name: "Spanish", font: "Bricolage Grotesque" },
         { code: "uk", name: "Ukrainian" },
       ],
+      "per-language font override should round-trip in exported settings.languages",
     );
     const loaded = await client.callTool({
       name: "load_project",

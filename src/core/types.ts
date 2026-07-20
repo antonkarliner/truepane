@@ -151,9 +151,13 @@ export interface SlideText {
 
 // A target language for AI translation. `code` is used for ZIP folder names and
 // as the key into `Slide.translations`; `name` is the human label sent to the AI.
+// `font` optionally overrides the global fontFamily when rendering this language
+// — e.g. a Noto Sans Arabic override so an Arabic locale renders while the base
+// uses San Francisco. A FONT_OPTIONS id; falls back to the global font if unset.
 export interface LanguageTarget {
   code: string;
   name: string;
+  font?: string;
 }
 
 export interface Settings {
