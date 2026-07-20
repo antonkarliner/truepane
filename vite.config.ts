@@ -29,6 +29,7 @@ function jsonLd(siteUrl: string | null): string {
       "Local browser canvas rendering",
       "PNG, horizontal strip, ZIP, and JSON project export",
       "Optional AI prompt helper for background and palette settings",
+      "MCP server (truepane-mcp) for AI agents to generate screenshots",
     ],
   };
   if (siteUrl) {
