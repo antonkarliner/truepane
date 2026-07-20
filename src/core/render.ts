@@ -988,6 +988,14 @@ function familyToCss(family: string): string {
   return (bare ? family : `"${family}"`) + ", system-ui, sans-serif";
 }
 
+// Strong right-to-left scripts (Arabic, Hebrew, and their presentation forms).
+// A field containing any of these is drawn right-aligned with an RTL base
+// direction. Glyph shaping and bidi reordering are handled by the canvas
+// engine itself (browser DOM canvas and @napi-rs/canvas both shape); this only
+// fixes alignment and base direction so a title like Arabic reads from the
+// right edge instead of the left.
+const RTL_CHARS = /[֐-׿؀-ۿݐ-ݿࢠ-ࣿיִ-﷿ﹰ-﻿]/;
+
 function paintText(
   ctx: CanvasRenderingContext2D,
   slide: Slide,
@@ -999,28 +1007,41 @@ function paintText(
   const font = familyToCss(settings.fontFamily || "Inter");
   ctx.textBaseline = "top";
 
+  const title = slide.title || "";
+  const titleRtl = RTL_CHARS.test(title);
   const titleScale = settings.titleScale ?? 1;
   ctx.fillStyle = slide.titleColor ?? (settings.titleColor || "#1a1612");
   ctx.font = `${T.titleWeight} ${Math.round(T.titleFontSize * titleScale)}px ${font}`;
-  const titleLines = wrapText(ctx, slide.title || "", maxW);
+  ctx.textAlign = titleRtl ? "right" : "left";
+  ctx.direction = titleRtl ? "rtl" : "ltr";
+  const titleX = titleRtl ? F.W - T.rightPad : T.leftPad;
+  const titleLines = wrapText(ctx, title, maxW);
   let y = T.titleTop;
   for (const line of titleLines) {
-    ctx.fillText(line, T.leftPad, y);
+    ctx.fillText(line, titleX, y);
     y += Math.round(T.titleLineHeight * titleScale);
   }
   const titleBottom = y;
 
   if (slide.subhead) {
+    const subRtl = RTL_CHARS.test(slide.subhead);
     const scale = settings.subtitleScale ?? 1;
     ctx.fillStyle = slide.subheadColor ?? (settings.subheadColor || "rgba(26,22,18,0.62)");
     ctx.font = `${T.subheadWeight} ${Math.round(T.subheadFontSize * scale)}px ${font}`;
+    ctx.textAlign = subRtl ? "right" : "left";
+    ctx.direction = subRtl ? "rtl" : "ltr";
+    const subX = subRtl ? F.W - T.rightPad : T.leftPad;
     const subLines = wrapText(ctx, slide.subhead, maxW);
     let sy = Math.max(T.subheadTop, titleBottom + 30);
     for (const line of subLines) {
-      ctx.fillText(line, T.leftPad, sy);
+      ctx.fillText(line, subX, sy);
       sy += Math.round(T.subheadLineHeight * scale);
     }
   }
+
+  // Restore defaults so later draws sharing this context are unaffected.
+  ctx.textAlign = "left";
+  ctx.direction = "ltr";
 }
 
 // ---------------------------------------------------------------------

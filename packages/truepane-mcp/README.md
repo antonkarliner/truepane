@@ -15,19 +15,33 @@ translation are its own judgment calls.
 
 ## Install
 
-Add it to Claude Code (no checkout required):
+It's a standard stdio MCP server — any MCP-capable client can launch it with
+`npx -y truepane-mcp` (no checkout required). Requires Node ≥ 18.
+
+**Claude Code**
 
 ```sh
 claude mcp add truepane -- npx -y truepane-mcp
 ```
 
-Or run the binary directly:
+**Codex CLI** — add to `~/.codex/config.toml`:
 
-```sh
-npx -y truepane-mcp        # stdio MCP server
+```toml
+[mcp_servers.truepane]
+command = "npx"
+args = ["-y", "truepane-mcp"]
 ```
 
-Requires Node ≥ 18.
+**Cursor, Windsurf, Claude Desktop, and other JSON-config clients** — add to the
+client's `mcpServers` block:
+
+```json
+{
+  "mcpServers": {
+    "truepane": { "command": "npx", "args": ["-y", "truepane-mcp"] }
+  }
+}
+```
 
 ## Workflow the tools expect
 
@@ -54,8 +68,10 @@ Requires Node ≥ 18.
 Google Fonts are fetched on demand and cached in `~/.cache/truepane/fonts`
 (Inter is bundled, so offline rendering works out of the box). For non-Latin
 target languages, pick a font that covers the script (Inter covers
-Cyrillic/Greek; Noto Sans JP/KR for CJK) — unlike browsers, server-side
-rendering has no per-glyph system-font fallback.
+Cyrillic/Greek; `Noto Sans JP/KR/SC` for CJK; `Noto Sans Arabic` for Arabic,
+which is shaped and laid out right-to-left automatically) — unlike browsers,
+server-side rendering has no per-glyph system-font fallback, so glyphs a font
+lacks come out as boxes.
 
 ## License
 

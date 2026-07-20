@@ -126,22 +126,41 @@ local paths; nothing is uploaded anywhere, and no configuration or env vars are
 needed: the agent is the LLM, so styling and translation are its own judgment calls
 (the web app's AI helpers are not involved).
 
-Add it to Claude Code from the published package — no checkout needed:
+It's a standard stdio MCP server published to npm as
+[`truepane-mcp`](https://www.npmjs.com/package/truepane-mcp), so any MCP-capable
+client can launch it with `npx -y truepane-mcp` — no checkout needed. Setup for
+the common ones:
+
+**Claude Code**
 
 ```sh
 claude mcp add truepane -- npx -y truepane-mcp
 ```
 
-The server lives in [`packages/truepane-mcp`](packages/truepane-mcp) and is
-published to npm as [`truepane-mcp`](https://www.npmjs.com/package/truepane-mcp).
-To run it from a repo checkout instead (for development):
+**Codex CLI** — add to `~/.codex/config.toml`:
 
-```sh
-npm install
-claude mcp add truepane -- npx tsx server/mcp/index.ts   # run from source
-# or build the standalone bundle:
-npm run mcp:build          # → packages/truepane-mcp/dist/index.js
+```toml
+[mcp_servers.truepane]
+command = "npx"
+args = ["-y", "truepane-mcp"]
 ```
+
+**Cursor, Windsurf, Claude Desktop, and other JSON-config clients** — add to the
+client's `mcpServers` block (e.g. `.cursor/mcp.json`,
+`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "truepane": { "command": "npx", "args": ["-y", "truepane-mcp"] }
+  }
+}
+```
+
+The server lives in [`packages/truepane-mcp`](packages/truepane-mcp). To run it
+from a repo checkout instead (for development), point the client's command at
+`npx tsx server/mcp/index.ts`, or `npm run mcp:build` and run
+`node packages/truepane-mcp/dist/index.js`.
 
 ### Workflow the tools expect
 
@@ -163,8 +182,10 @@ npm run mcp:build          # → packages/truepane-mcp/dist/index.js
 
 Google Fonts are fetched on demand and cached in `~/.cache/truepane/fonts` (Inter is
 bundled, so offline rendering works out of the box). For non-Latin target languages,
-pick a font that covers the script (Inter covers Cyrillic/Greek; Noto Sans JP/KR for
-CJK) — unlike browsers, server-side rendering has no per-glyph system-font fallback.
+pick a font that covers the script (Inter covers Cyrillic/Greek; `Noto Sans JP/KR/SC`
+for CJK; `Noto Sans Arabic` for Arabic, which is shaped and laid out right-to-left
+automatically) — unlike browsers, server-side rendering has no per-glyph system-font
+fallback, so glyphs a font lacks come out as boxes.
 
 ## Deployment
 

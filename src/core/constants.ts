@@ -56,6 +56,7 @@ export const FONT_OPTIONS: FontOption[] = [
   { id: "Source Serif 4", label: "Source Serif 4", google: "Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700" },
   { id: "Noto Sans", label: "Noto Sans (multi-script)", google: "Noto+Sans:wght@400;500;600;700" },
   { id: "Noto Serif", label: "Noto Serif (multi-script)", google: "Noto+Serif:wght@400;600;700" },
+  { id: "Noto Sans Arabic", label: "Noto Sans Arabic (العربية)", google: "Noto+Sans+Arabic:wght@400;500;700" },
   { id: "Noto Sans SC", label: "Noto Sans SC (简体中文)", google: "Noto+Sans+SC:wght@400;500;700", heavy: true },
   { id: "Noto Sans JP", label: "Noto Sans JP (日本語)", google: "Noto+Sans+JP:wght@400;500;700", heavy: true },
   { id: "Noto Sans KR", label: "Noto Sans KR (한국어)", google: "Noto+Sans+KR:wght@400;500;700", heavy: true },
