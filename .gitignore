@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+dist-mcp/
+packages/*/dist/
 dist-ssr/
 *.local
 *.tsbuildinfo
