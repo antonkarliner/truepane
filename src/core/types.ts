@@ -137,11 +137,16 @@ export interface CustomFont {
   dataUrl: string;
 }
 
-// A title/subhead pair. The base text lives on the slide directly; per-language
-// translations are stored as a map of these keyed by language code.
+// A title/subhead pair, optionally with its own localized screenshot. The base
+// text/image live on the slide directly; per-language overrides are stored as a
+// map of these keyed by language code. `imageDataUrl` is the serialized locale
+// screenshot; `image` is the live decode, rebuilt from it and never serialized.
+// Both are optional — a locale with no screenshot falls back to the base image.
 export interface SlideText {
   title: string;
   subhead: string;
+  imageDataUrl?: string | null;
+  image?: ImageSourceLike | null;
 }
 
 // A target language for AI translation. `code` is used for ZIP folder names and

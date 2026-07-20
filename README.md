@@ -175,7 +175,10 @@ from a repo checkout instead (for development), point the client's command at
    re-render until it looks right.
 5. `set_translations` — the agent translates the slide texts itself and stores the
    results per language; then `render` with `language: "all"` writes per-language
-   subfolders (`source/`, `es/`, …), matching the web app's all-languages ZIP.
+   subfolders (`source/`, `es/`, …), matching the web app's all-languages ZIP. A
+   locale can also carry its **own screenshots** (for apps whose UI is itself
+   localized): pass `screenshot_path` per slide here, or `set_screenshots` with a
+   `language`; a locale without its own screenshot reuses the base one.
 6. `export_project` / `load_project` — round-trip the project JSON with the web
    app's Import/Export Project, so a human can fine-tune the agent's work (or vice
    versa).

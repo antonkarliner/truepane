@@ -26,8 +26,9 @@ export function normalizeBackground(raw: unknown): Background {
   return b;
 }
 
-// Light guard for persisted/imported per-language translations: keep only an
-// object of { title, subhead } string pairs; drop anything malformed.
+// Light guard for persisted/imported per-language translations: keep the
+// { title, subhead } strings and an optional per-locale imageDataUrl; drop
+// anything malformed. Live `image` is never persisted, so it is not read here.
 export function normalizeTranslations(raw: unknown): Record<string, SlideText> | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const out: Record<string, SlideText> = {};
@@ -37,10 +38,27 @@ export function normalizeTranslations(raw: unknown): Record<string, SlideText> |
       out[code] = {
         title: typeof t.title === "string" ? t.title : "",
         subhead: typeof t.subhead === "string" ? t.subhead : "",
+        imageDataUrl: typeof t.imageDataUrl === "string" ? t.imageDataUrl : null,
       };
     }
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+// Serialize translations for persistence/export: keep title/subhead and only a
+// non-empty imageDataUrl; drop the live `image` (not JSON-serializable) so a
+// locale without its own screenshot stays the compact { title, subhead } shape.
+export function serializeTranslations(
+  translations: Record<string, SlideText> | undefined,
+): Record<string, SlideText> | undefined {
+  if (!translations) return undefined;
+  const out: Record<string, SlideText> = {};
+  for (const [code, t] of Object.entries(translations)) {
+    out[code] = t.imageDataUrl
+      ? { title: t.title, subhead: t.subhead, imageDataUrl: t.imageDataUrl }
+      : { title: t.title, subhead: t.subhead };
+  }
+  return out;
 }
 
 // Build a healed AppState from a parsed project JSON (localStorage payload or
