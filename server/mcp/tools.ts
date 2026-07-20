@@ -589,8 +589,9 @@ export function registerTools(server: McpServer): void {
         "Translations are stored on the slides (slide.translations) and the languages merged into " +
         "settings.languages, exactly like the web app — so the project round-trips through export_project. " +
         'Then render with language:"all" for per-language folders (or one code to inspect a single language). ' +
-        "For non-Latin scripts, pick a fontFamily that covers them (e.g. Inter covers Cyrillic/Greek, Noto Sans " +
-        "JP/KR cover CJK) — server-side rendering has no per-glyph system-font fallback, so uncovered glyphs " +
+        "For non-Latin scripts, pick a fontFamily that covers them (Inter covers Cyrillic/Greek, Noto Sans " +
+        'JP/KR/SC cover CJK, "Noto Sans Arabic" covers Arabic). Arabic is shaped and laid out right-to-left ' +
+        "automatically. Server-side rendering has no per-glyph system-font fallback, so glyphs a font lacks " +
         "come out as boxes; always inspect the render preview.",
       inputSchema: {
         project_id: z.string().describe("Project id"),
