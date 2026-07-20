@@ -64,6 +64,24 @@
         </p>
       </article>
     </div>
+    <div class="seo-content__mcp">
+      <p class="seo-content__eyebrow">For AI agents · MCP</p>
+      <h2>Let an AI agent build your screenshots</h2>
+      <p>
+        Truepane ships an open-source
+        <a href="https://modelcontextprotocol.io">Model Context Protocol</a> server,
+        so coding agents like Claude Code, Codex, and Cursor can frame raw simulator
+        screenshots, style them, localize the text (including right-to-left scripts
+        such as Arabic), and render store-ready PNGs — no browser needed. It runs
+        locally and needs no API keys.
+      </p>
+      <pre class="seo-content__code"><code>npx -y truepane-mcp</code></pre>
+      <p class="seo-content__mcp-links">
+        <a href="https://www.npmjs.com/package/truepane-mcp">npm&nbsp;· truepane-mcp</a>
+        <span aria-hidden="true">·</span>
+        <a href="https://github.com/antonkarliner/truepane/tree/main/packages/truepane-mcp">Docs&nbsp;&amp; source</a>
+      </p>
+    </div>
     <div class="seo-content__faq" aria-label="Truepane FAQ">
       <h2>FAQ</h2>
       <details>
@@ -87,6 +105,17 @@
         <p>
           Yes. Truepane includes Apple and Android device formats and exports
           slide PNGs, horizontal strips, ZIP files, and JSON project backups.
+        </p>
+      </details>
+      <details>
+        <summary>Can AI agents use Truepane?</summary>
+        <p>
+          Yes. Truepane publishes a local Model Context Protocol (MCP) server,
+          <code>truepane-mcp</code>, that any MCP client (Claude Code, Codex,
+          Cursor, and others) can run with <code>npx -y truepane-mcp</code>. An
+          agent can create a project from local screenshots, style it, translate
+          the copy into other languages, and render store-ready PNGs — no API keys
+          required. Projects round-trip with this web app via Import/Export.
         </p>
       </details>
     </div>

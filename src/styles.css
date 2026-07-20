@@ -613,6 +613,52 @@ button { cursor: pointer; font: inherit; }
   font-size: 14px;
   line-height: 1.55;
 }
+.seo-content__mcp {
+  margin-top: 52px;
+  max-width: 760px;
+}
+.seo-content__mcp h2 {
+  font-size: clamp(22px, 3vw, 30px);
+  line-height: 1.1;
+  margin: 0 0 14px;
+}
+.seo-content__mcp > p {
+  margin: 0;
+  color: rgba(26,22,18,0.72);
+  font-size: 16px;
+  line-height: 1.6;
+}
+.seo-content__mcp a {
+  color: #1a1612;
+}
+.seo-content__code {
+  margin: 20px 0 0;
+  padding: 14px 16px;
+  background: #1a1612;
+  color: #f6f3ec;
+  border-radius: 8px;
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 14px;
+  overflow-x: auto;
+}
+.seo-content__code code {
+  font-family: inherit;
+}
+.seo-content__mcp p.seo-content__mcp-links {
+  margin-top: 16px;
+  font-size: 14px;
+  color: rgba(26,22,18,0.55);
+  display: flex;
+  gap: 10px;
+}
+.seo-content details code,
+.seo-content__mcp :not(pre) > code {
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 0.9em;
+  background: rgba(26,22,18,0.07);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
 .seo-content__faq {
   margin-top: 52px;
   max-width: 760px;
