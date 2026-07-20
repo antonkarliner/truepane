@@ -206,6 +206,25 @@ async function main(): Promise<void> {
       "es/slide-02 should equal source (empty translation falls back to base text)",
     );
 
+    // 7b) per-locale screenshot: give es its own screenshot for slide 2 (which
+    // otherwise falls back to the base). es/slide-02 must then differ from
+    // source — proving one project can hold a distinct screenshot per locale.
+    const esShot = fakeScreenshot(tmp, "es-screen", "#16a34a");
+    await client.callTool({
+      name: "set_screenshots",
+      arguments: { project_id: "smoke", screenshots: [{ index: 1, path: esShot, language: "es" }] },
+    });
+    const esDir = path.join(outDir, "es-only");
+    await client.callTool({
+      name: "render",
+      arguments: { project_id: "smoke", output_dir: esDir, what: "slides", scale: 0.5, language: "es" },
+    });
+    assert.notDeepEqual(
+      fs.readFileSync(path.join(esDir, "slide-02.png")),
+      fs.readFileSync(path.join(i18nDir, "source", "slide-02.png")),
+      "es/slide-02 should differ from source once the es locale has its own screenshot",
+    );
+
     // 8) export → load round-trip preserves screenshots AND translations
     const projFile = path.join(tmp, "truepane-project.json");
     await client.callTool({ name: "export_project", arguments: { project_id: "smoke", path: projFile } });
@@ -214,6 +233,14 @@ async function main(): Promise<void> {
     assert.ok(parsed.slides[0].imageDataUrl.startsWith("data:image/png;base64,"));
     assert.equal(parsed.settings.background.shape, "bubbles");
     assert.equal(parsed.slides[0].translations.es.title, "Prepara mejor café");
+    assert.ok(
+      parsed.slides[1].translations.es.imageDataUrl?.startsWith("data:image/png;base64,"),
+      "per-locale screenshot should round-trip in the exported JSON",
+    );
+    assert.ok(
+      !("image" in parsed.slides[1].translations.es),
+      "the live image must not leak into exported JSON",
+    );
     assert.deepEqual(
       parsed.settings.languages,
       [

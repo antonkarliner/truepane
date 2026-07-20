@@ -4,7 +4,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { defaultState } from "../../src/core/constants";
-import { normalizeAppState } from "../../src/core/normalize";
+import { normalizeAppState, serializeTranslations } from "../../src/core/normalize";
 import type { AppState, ImageSourceLike } from "../../src/core/types";
 import { tryLoadImage } from "./canvas";
 
@@ -74,13 +74,23 @@ export async function loadScreenshot(
   return { dataUrl, image };
 }
 
-/** Rebuild napi Images from imageDataUrl strings (after load_project). */
+async function decodeDataUrl(dataUrl: string): Promise<ImageSourceLike | null> {
+  return (await tryLoadImage(
+    Buffer.from(dataUrl.split(",")[1] ?? "", "base64"),
+  )) as unknown as ImageSourceLike | null;
+}
+
+/** Rebuild napi Images from imageDataUrl strings (after load_project) — the
+ * base screenshot on each slide plus any per-locale translation screenshots. */
 export async function hydrateImages(state: AppState): Promise<void> {
   for (const slide of state.slides) {
     if (slide.imageDataUrl && !slide.image) {
-      slide.image = (await tryLoadImage(
-        Buffer.from(slide.imageDataUrl.split(",")[1] ?? "", "base64"),
-      )) as unknown as ImageSourceLike | null;
+      slide.image = await decodeDataUrl(slide.imageDataUrl);
+    }
+    for (const t of Object.values(slide.translations ?? {})) {
+      if (t.imageDataUrl && !t.image) {
+        t.image = await decodeDataUrl(t.imageDataUrl);
+      }
     }
   }
 }
@@ -95,7 +105,7 @@ export function projectJson(state: AppState): string {
       subhead: s.subhead,
       imageDataUrl: s.imageDataUrl || null,
       background: s.background,
-      translations: s.translations,
+      translations: serializeTranslations(s.translations),
     })),
   };
   return JSON.stringify(payload, null, 2);

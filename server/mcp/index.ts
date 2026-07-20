@@ -13,7 +13,7 @@ import { registerTools } from "./tools";
 
 async function main(): Promise<void> {
   registerDefaultFonts();
-  const server = new McpServer({ name: "truepane", version: "0.1.1" });
+  const server = new McpServer({ name: "truepane", version: "0.1.2" });
   registerTools(server);
   const transport = new StdioServerTransport();
   await server.connect(transport);
