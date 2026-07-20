@@ -2,8 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Truepane — App screenshot generator</title>
+<title>Truepane - App Store Screenshot Generator for Indie Apps</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Create App Store and Google Play screenshots in your browser with device frames, styled backgrounds, local canvas rendering, and PNG, strip, or ZIP export." />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<meta name="theme-color" content="#f6f3ec" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Truepane" />
+<meta property="og:title" content="Truepane - App Store Screenshot Generator" />
+<meta property="og:description" content="Generate App Store and Google Play screenshot sets locally in your browser, then export slide PNGs, a strip, or a ZIP." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Truepane - App Store Screenshot Generator" />
+<meta name="twitter:description" content="A browser-based screenshot generator for indie apps, with local canvas rendering and store-ready exports." />
+<!-- truepane:origin-tags -->
+<!-- truepane:structured-data -->
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <!-- Base font (Inter) preloaded; others load on demand. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,6 +24,74 @@
 </head>
 <body>
 <div id="root"></div>
+<section class="seo-content" aria-labelledby="seo-title">
+  <div class="seo-content__inner">
+    <p class="seo-content__eyebrow">Browser-based screenshot generator</p>
+    <h1 id="seo-title">Create App Store and Google Play screenshots with Truepane</h1>
+    <p class="seo-content__lead">
+      Truepane helps indie app builders turn product screenshots into store-ready
+      screenshot sets. Add title and subtitle text, choose an iPhone, iPad,
+      Android phone, or Android tablet frame, style a procedural background, and
+      export individual PNGs, one horizontal strip, or a ZIP.
+    </p>
+    <div class="seo-content__grid" aria-label="Truepane features">
+      <article>
+        <h2>Store-sized frames</h2>
+        <p>
+          Generate screenshots for App Store and Google Play formats, including
+          iPhone 6.9 inch, iPad 13 inch, Android phone, and Android tablet.
+        </p>
+      </article>
+      <article>
+        <h2>Local canvas rendering</h2>
+        <p>
+          Screenshots are rendered in the browser. Uploaded app images stay on
+          your device and are not sent to a server by the generator.
+        </p>
+      </article>
+      <article>
+        <h2>Export options</h2>
+        <p>
+          Download a single slide PNG, a horizontal screenshot strip, a ZIP of
+          all slides, or a JSON project file for later editing.
+        </p>
+      </article>
+      <article>
+        <h2>Optional AI styling</h2>
+        <p>
+          When configured, the AI prompt helper can turn a short style prompt
+          into background and palette settings. The app still works without it.
+        </p>
+      </article>
+    </div>
+    <div class="seo-content__faq" aria-label="Truepane FAQ">
+      <h2>FAQ</h2>
+      <details>
+        <summary>What is Truepane?</summary>
+        <p>
+          Truepane is a browser app for making App Store and Google Play
+          screenshot sets with device frames, text overlays, generated
+          backgrounds, and export tools.
+        </p>
+      </details>
+      <details>
+        <summary>Does Truepane upload my app screenshots?</summary>
+        <p>
+          No. Screenshot composition happens locally on canvas in your browser.
+          The optional AI style helper only sends the text prompt when that
+          feature is configured and used.
+        </p>
+      </details>
+      <details>
+        <summary>Can I export screenshots for both App Store and Google Play?</summary>
+        <p>
+          Yes. Truepane includes Apple and Android device formats and exports
+          slide PNGs, horizontal strips, ZIP files, and JSON project backups.
+        </p>
+      </details>
+    </div>
+  </div>
+</section>
 <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
