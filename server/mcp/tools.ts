@@ -22,7 +22,7 @@ import {
 } from "../../src/core/render";
 import type { AppState, Background, CanvasLike, ImageSourceLike, LanguageTarget, Settings, Slide, SlideText } from "../../src/core/types";
 import { makeCanvas, paletteOfImage, pngBuffer, tryLoadImage } from "./canvas";
-import { ensureFontsForState } from "./fonts";
+import { ensureFamily, ensureFontsForState } from "./fonts";
 import {
   createProject,
   getProject,
@@ -121,16 +121,20 @@ async function applyScreenshot(
 }
 
 // Ensure a locale is in settings.languages so language:"all" renders it. Adds
-// { code, name } if new; for an existing code, only updates the name when one is
-// explicitly given (so a screenshot-only call can't clobber a human label).
-function mergeLanguage(state: AppState, code: string, name?: string): void {
+// { code, name, font? } if new; for an existing code, only updates name/font
+// when explicitly given (so a screenshot-only call can't clobber a label/font).
+function mergeLanguage(state: AppState, code: string, name?: string, font?: string): void {
   const existing = state.settings.languages ?? [];
   const at = existing.findIndex((l) => l.code === code);
   if (at >= 0) {
-    state.settings.languages = name ? existing.map((l, i) => (i === at ? { ...l, name } : l)) : existing;
+    const patch: Partial<LanguageTarget> = {};
+    if (name) patch.name = name;
+    if (font !== undefined) patch.font = font;
+    state.settings.languages = Object.keys(patch).length
+      ? existing.map((l, i) => (i === at ? { ...l, ...patch } : l))
+      : existing;
   } else {
-    const lang: LanguageTarget = { code, name: name || code };
-    state.settings.languages = [...existing, lang];
+    state.settings.languages = [...existing, { code, name: name || code, ...(font ? { font } : {}) }];
   }
 }
 
@@ -398,7 +402,9 @@ export function registerTools(server: McpServer): void {
         "Background fields: fill (solid|linear|radial), shape (see list_options), color, gradientColor, accent, " +
         "accentOpacity (0..1), ringLayout, ringCount (1..8), seed, density (1..8), dotsAligned, gradientAngle. " +
         "With slide_index (0-based), background/titleColor/subheadColor apply as per-slide overrides instead " +
-        "(other fields are global-only and rejected). Re-render after changes to see the result.",
+        "(other fields are global-only and rejected). With language (a locale code, e.g. \"ar\"), fontFamily " +
+        "sets that locale's font override — used only when rendering that language, while the base keeps the " +
+        "global font (pass only fontFamily). Re-render after changes to see the result.",
       inputSchema: {
         project_id: z.string().describe("Project id"),
         slide_index: z
@@ -407,6 +413,10 @@ export function registerTools(server: McpServer): void {
           .min(0)
           .optional()
           .describe("If set, apply background/titleColor/subheadColor to this slide only"),
+        language: z
+          .string()
+          .optional()
+          .describe('If set (a locale code, e.g. "ar"), fontFamily becomes that language\'s font override'),
         fontFamily: z
           .enum(FONT_IDS as [string, ...string[]])
           .optional()
@@ -422,9 +432,18 @@ export function registerTools(server: McpServer): void {
         background: backgroundSchema.optional().describe("Partial background patch"),
       },
     },
-    async ({ project_id, slide_index, fontFamily, titleColor, subheadColor, titleScale, subtitleScale, platform, background }) => {
+    async ({ project_id, slide_index, language, fontFamily, titleColor, subheadColor, titleScale, subtitleScale, platform, background }) => {
       const project = getProject(project_id);
       const state = project.state;
+      if (language !== undefined) {
+        if (slide_index !== undefined) throw new Error("Pass either language or slide_index, not both.");
+        if (!fontFamily) throw new Error('set_style with language sets that locale\'s font — pass fontFamily (a font id from list_options).');
+        if (titleColor !== undefined || subheadColor !== undefined || background || titleScale !== undefined || subtitleScale !== undefined || platform) {
+          throw new Error("With language, only fontFamily is applied (per-language font override). Set colors/background/scale/platform without language.");
+        }
+        mergeLanguage(state, language, undefined, fontFamily);
+        return text(`Set the font for language "${language}" to "${fontFamily}" (base keeps "${state.settings.fontFamily}").\n${summarize(state, project.id)}`);
+      }
       if (slide_index !== undefined) {
         if (fontFamily || titleScale !== undefined || subtitleScale !== undefined || platform) {
           throw new Error(
@@ -470,8 +489,9 @@ export function registerTools(server: McpServer): void {
         'smaller draft output. language: omit for the base text; a language code (e.g. "es") renders that ' +
         'translation (blank/missing fields fall back to base text); "all" writes per-language subfolders of ' +
         "output_dir — source/ plus one per settings.languages code, same layout as the web app's all-languages " +
-        "ZIP (add languages with set_translations first). Fonts are fetched/registered automatically before " +
-        "rendering. Iterate: render → look at preview → set_style → render again.",
+        "ZIP (add languages with set_translations first). Each language renders in its own font override when " +
+        "set (see set_translations font / set_style language), else the global font. Fonts are " +
+        "fetched/registered automatically before rendering. Iterate: render → look at preview → set_style → render again.",
       inputSchema: {
         project_id: z.string().describe("Project id"),
         output_dir: z.string().describe("Absolute directory for the PNGs (created if missing)"),
@@ -514,10 +534,16 @@ export function registerTools(server: McpServer): void {
       let previewCanvas: Canvas | null = null;
       for (const { code, dir } of targets) {
         fs.mkdirSync(dir, { recursive: true });
+        // Per-language font override: a locale can render in its own font (e.g.
+        // Noto Sans Arabic) while the base uses the global one. Falls back to
+        // the global fontFamily when the language has no override.
+        const langFont = code ? state.settings.languages?.find((l) => l.code === code)?.font : undefined;
+        const rs: Settings = langFont ? { ...state.settings, fontFamily: langFont } : state.settings;
+        if (langFont) await ensureFamily(langFont);
         const slides = state.slides.map((s) => resolveSlide(s, code));
         if (mode === "slides" || mode === "both") {
           for (let i = 0; i < slides.length; i++) {
-            const c = await renderSlideCanvas(slides, state.settings, i, k);
+            const c = await renderSlideCanvas(slides, rs, i, k);
             const file = path.join(dir, `slide-${String(i + 1).padStart(2, "0")}.png`);
             fs.writeFileSync(file, pngBuffer(c));
             out.push(`${file} (${c.width}x${c.height})`);
@@ -526,7 +552,7 @@ export function registerTools(server: McpServer): void {
         }
         if (mode === "strip" || mode === "both") {
           const full = makeCanvas(1, 1);
-          await paintStrip(full as unknown as CanvasLike, slides, state.settings);
+          await paintStrip(full as unknown as CanvasLike, slides, rs);
           const c = scaled(full, k);
           const file = path.join(dir, "strip.png");
           fs.writeFileSync(file, pngBuffer(c));
@@ -643,7 +669,8 @@ export function registerTools(server: McpServer): void {
         "Each slide entry may also include screenshot_path to give that locale its own screenshot (for apps " +
         "whose UI is itself localized — e.g. an Arabic build); omit it and the locale reuses the base " +
         "screenshot. You can also set locale screenshots separately with set_screenshots (pass language). " +
-        "For non-Latin scripts, pick a fontFamily that covers them (Inter covers Cyrillic/Greek, Noto Sans " +
+        "For non-Latin scripts set a per-language font (the entry's font, or set_style with language) so this " +
+        "locale renders in a covering font while the base keeps the global one — Inter covers Cyrillic/Greek, Noto Sans " +
         'JP/KR/SC cover CJK, "Noto Sans Arabic" covers Arabic). Arabic is shaped and laid out right-to-left ' +
         "automatically. Server-side rendering has no per-glyph system-font fallback, so glyphs a font lacks " +
         "come out as boxes; always inspect the render preview.",
@@ -654,6 +681,10 @@ export function registerTools(server: McpServer): void {
             z.object({
               code: z.string().min(1).describe('Language code, used as folder name and translations key (e.g. "es")'),
               name: z.string().min(1).describe('Human-readable language name (e.g. "Spanish")'),
+              font: z
+                .enum(FONT_IDS as [string, ...string[]])
+                .optional()
+                .describe("Font id (from list_options) to render this language in, overriding the global font"),
               slides: z
                 .array(
                   z.object({
@@ -695,7 +726,7 @@ export function registerTools(server: McpServer): void {
             await applyScreenshot(entry, s.screenshot_path, state.settings.platform, `slide ${i + 1} [${t.code}]`, notes);
           }
         }
-        mergeLanguage(state, t.code, t.name);
+        mergeLanguage(state, t.code, t.name, t.font);
       }
       const withShots = translations.filter((t) => t.slides.some((s) => s.screenshot_path)).map((t) => t.code);
       const noteBlock = notes.length ? `\nNotes:\n${notes.map((n) => `- ${n}`).join("\n")}` : "";

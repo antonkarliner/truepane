@@ -60,7 +60,9 @@ client's `mcpServers` block:
    stores the results per language; then `render` with `language: "all"` writes
    per-language subfolders (`source/`, `es/`, …). A locale can also carry its
    own screenshots (for localized app UIs) via `screenshot_path` here or
-   `set_screenshots` with a `language`; locales without one reuse the base.
+   `set_screenshots` with a `language`; locales without one reuse the base. Each
+   language can also render in its own font (`font` here, or `set_style` with a
+   `language`) — e.g. SF for the base, `Noto Sans Arabic` for `ar`.
 6. **`export_project`** / **`load_project`** — round-trip the project JSON with
    the Truepane web app's Import/Export Project, so a human can fine-tune the
    agent's work (or vice versa).

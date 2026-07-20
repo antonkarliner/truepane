@@ -1,6 +1,6 @@
 {
   "name": "truepane-mcp",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Local MCP server for Truepane — turn raw app screenshots into store-ready App Store / Google Play slides (device frames, generated backgrounds, agent-supplied localization) with a native canvas. Zero config.",
   "license": "AGPL-3.0-only",
   "type": "module",
