@@ -206,7 +206,7 @@ export function registerTools(server: McpServer): void {
         return `- "${p.id}": ${p.label} — ${p.storeLabel} — exports ${d.W}x${d.H}px`;
       });
       const fonts = FONT_OPTIONS.map(
-        (f) => `- "${f.id}": ${f.label}${f.google ? " (Google Fonts, downloaded on demand)" : " (system font — rendered with bundled Inter on the server)"}`,
+        (f) => `- "${f.id}": ${f.label}${f.google ? " (Google Fonts, downloaded on demand)" : " (system font — real San Francisco on macOS if installed, else bundled Inter)"}`,
       );
       const fills = FILL_OPTIONS.map((f) => `- "${f.id}": ${f.name}`);
       const shapes = SHAPE_FAMILIES.map(

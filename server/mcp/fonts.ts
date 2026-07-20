@@ -46,6 +46,32 @@ export function registerDefaultFonts(): void {
   registerBundled("Inter");
 }
 
+// System-font families (no `google` spec) that can be satisfied from the OS's
+// own installed fonts. We register from these existing paths only — Apple's San
+// Francisco is proprietary and must never be bundled/redistributed, so this
+// gives real SF on a licensed macOS box and falls back to bundled Inter
+// elsewhere (Linux/CI), mirroring how a browser resolves `-apple-system`.
+const SYSTEM_FONT_PATHS: Record<string, string[]> = {
+  "-apple-system": [
+    "/System/Library/Fonts/SFNS.ttf", // San Francisco (macOS 11+ variable UI font)
+    "/System/Library/Fonts/SFNSDisplay.ttf", // pre-Big Sur
+    "/System/Library/Fonts/SFNSText.ttf",
+  ],
+};
+
+/** Register a no-fetch system font from the OS's own installed copy if present,
+ * else alias bundled Inter. Never downloads or bundles the system font. */
+function registerSystemFont(family: string): void {
+  if (registered.has(family)) return;
+  for (const p of SYSTEM_FONT_PATHS[family] ?? []) {
+    if (fs.existsSync(p) && GlobalFonts.registerFromPath(p, family)) {
+      registered.add(family);
+      return;
+    }
+  }
+  registerBundled(family);
+}
+
 // Resolve a css2 family spec to TTF URLs. An empty User-Agent makes Google
 // serve static truetype files (one @font-face per weight) instead of woff2.
 async function fetchTtfUrls(googleSpec: string): Promise<string[]> {
@@ -80,9 +106,9 @@ export async function ensureFamily(family: string): Promise<void> {
     return;
   }
   if (!opt.google) {
-    // System font (e.g. -apple-system): nothing to fetch. Alias bundled Inter
-    // so the exact family name in ctx.font resolves.
-    registerBundled(family);
+    // System font (e.g. -apple-system): register the OS's own installed copy
+    // if present (real San Francisco on macOS), else alias bundled Inter.
+    registerSystemFont(family);
     return;
   }
   try {
