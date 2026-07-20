@@ -1,11 +1,11 @@
 // Mobile layout for Truepane — preview-first workflow with bottom sheet tabs.
 import { useEffect, useRef, useState } from "react";
 import { ColorRow, Field, ImageDrop, LayoutSlider, Segmented, SlidePreview, TextInput } from "./components";
-import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimFor } from "./render";
+import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimFor } from "./core/render";
 import { accentSuggestions, extractPalette } from "./palette";
 import { aiConfigured, generateBackground, type AiProvider } from "./ai";
-import { BG_PRESETS, FONT_OPTIONS } from "./constants";
-import type { AppState, Background, BackgroundFill, ShapeKind, Settings, Slide, StoreId } from "./types";
+import { BG_PRESETS, FONT_OPTIONS } from "./core/constants";
+import type { AppState, Background, BackgroundFill, ShapeKind, Settings, Slide, StoreId } from "./core/types";
 
 const DEFAULT_SHAPE_PRESETS = ["#c47c3b", "#1a1612", "#5b6647", "#c4523b", "#5b6cff", "#8a6f4f"];
 const STORE_LABELS: Record<StoreId, string> = { appstore: "App Store", playstore: "Google Play" };

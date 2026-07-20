@@ -19,8 +19,10 @@
 
 import type {
   Background,
+  CanvasLike,
   FillOption,
   Frame,
+  ImageSourceLike,
   PlatformDim,
   PlatformMeta,
   RingLayout,
@@ -29,6 +31,37 @@ import type {
   ShapeFamily,
   Slide,
 } from "./types";
+
+// ---------------------------------------------------------------------
+// Canvas factory — where every canvas this module draws on comes from.
+// Defaults to the DOM implementation; a Node entry point installs its own
+// (e.g. @napi-rs/canvas) via setCanvasFactory. `document` is only touched
+// when a canvas is actually created without an override, so importing this
+// module outside the browser is safe.
+// ---------------------------------------------------------------------
+export type CanvasFactory = (width: number, height: number) => CanvasLike;
+
+let canvasFactory: CanvasFactory | null = null;
+
+export function setCanvasFactory(fn: CanvasFactory): void {
+  canvasFactory = fn;
+}
+
+function createCanvas(width: number, height: number): CanvasLike {
+  const c: CanvasLike = canvasFactory
+    ? canvasFactory(width, height)
+    : document.createElement("canvas");
+  c.width = width;
+  c.height = height;
+  return c;
+}
+
+// drawImage only needs a width/height-bearing pixel source at runtime, but
+// the DOM typings insist on the concrete CanvasImageSource union — funnel our
+// structural types through this single cast.
+function toDrawable(src: CanvasLike | ImageSourceLike): CanvasImageSource {
+  return src as unknown as CanvasImageSource;
+}
 
 // ---------------------------------------------------------------------
 // Frame factory — validates the concentric-corner invariant at definition.
@@ -246,7 +279,7 @@ export function getFrame(platform: string): Frame {
 // ---------------------------------------------------------------------
 // Canvas helpers
 // ---------------------------------------------------------------------
-function get2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+function get2d(canvas: CanvasLike): CanvasRenderingContext2D {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("2D canvas context unavailable");
   return ctx;
@@ -275,9 +308,7 @@ function roundRect(
 // with destination-out (antialiased).
 // ---------------------------------------------------------------------
 function paintFrameChrome(ctx: CanvasRenderingContext2D, F: Frame): void {
-  const c = document.createElement("canvas");
-  c.width = F.W;
-  c.height = F.H;
+  const c = createCanvas(F.W, F.H);
   const fx = get2d(c);
 
   // 1) Soft drop shadow under the body
@@ -327,7 +358,7 @@ function paintFrameChrome(ctx: CanvasRenderingContext2D, F: Frame): void {
   fx.stroke();
   fx.restore();
 
-  ctx.drawImage(c, 0, 0);
+  ctx.drawImage(toDrawable(c), 0, 0);
 }
 
 // Front camera — Dynamic Island (iOS) or hole-punch dot (Android).
@@ -506,9 +537,7 @@ function paintBlobs(
 
   // Paint onto an offscreen layer at full opacity, then composite once at
   // accentOpacity, so blobs that do touch don't stack into darker lobes.
-  const layer = document.createElement("canvas");
-  layer.width = F.W;
-  layer.height = F.H;
+  const layer = createCanvas(F.W, F.H);
   const lx = get2d(layer);
   lx.fillStyle = bg.accent;
 
@@ -531,7 +560,7 @@ function paintBlobs(
 
   ctx.save();
   ctx.globalAlpha = bg.accentOpacity ?? 0.55;
-  ctx.drawImage(layer, 0, 0);
+  ctx.drawImage(toDrawable(layer), 0, 0);
   ctx.restore();
 }
 
@@ -776,9 +805,7 @@ function paintTriangles(
   const rows = Math.max(1, Math.round(F.H / cell));
   const cw = stripW / cols;
   const ch = F.H / rows;
-  const layer = document.createElement("canvas");
-  layer.width = F.W;
-  layer.height = F.H;
+  const layer = createCanvas(F.W, F.H);
   const lx = get2d(layer);
   lx.fillStyle = bg.accent;
   for (let c = 0; c < cols; c++) {
@@ -808,7 +835,7 @@ function paintTriangles(
   }
   ctx.save();
   ctx.globalAlpha = bg.accentOpacity ?? 0.55;
-  ctx.drawImage(layer, 0, 0);
+  ctx.drawImage(toDrawable(layer), 0, 0);
   ctx.restore();
 }
 
@@ -1004,13 +1031,11 @@ function paintText(
 // ---------------------------------------------------------------------
 function paintScreenshot(
   ctx: CanvasRenderingContext2D,
-  screenshotImg: HTMLImageElement | null,
+  screenshotImg: ImageSourceLike | null,
   F: Frame,
 ): void {
   const S = F.SCREEN;
-  const off = document.createElement("canvas");
-  off.width = S.w;
-  off.height = S.h;
+  const off = createCanvas(S.w, S.h);
   const o = get2d(off);
 
   if (!screenshotImg) {
@@ -1046,7 +1071,7 @@ function paintScreenshot(
       dx = 0;
       dy = (S.h - dh) / 2;
     }
-    o.drawImage(screenshotImg, dx, dy, dw, dh);
+    o.drawImage(toDrawable(screenshotImg), dx, dy, dw, dh);
   }
 
   o.globalCompositeOperation = "destination-in";
@@ -1054,7 +1079,7 @@ function paintScreenshot(
   roundRect(o, 0, 0, S.w, S.h, S.r);
   o.fill();
 
-  ctx.drawImage(off, S.x, S.y);
+  ctx.drawImage(toDrawable(off), S.x, S.y);
 }
 
 function paintFrameOverlay(ctx: CanvasRenderingContext2D, F: Frame): void {
@@ -1066,7 +1091,7 @@ function paintFrameOverlay(ctx: CanvasRenderingContext2D, F: Frame): void {
 // Main entry — slide & strip
 // ---------------------------------------------------------------------
 export async function paintSlide(
-  canvas: HTMLCanvasElement,
+  canvas: CanvasLike,
   slide: Slide,
   settings: Settings,
   slideIndex: number,
@@ -1085,7 +1110,7 @@ export async function paintSlide(
 }
 
 export async function paintStrip(
-  canvas: HTMLCanvasElement,
+  canvas: CanvasLike,
   slides: Slide[],
   settings: Settings,
 ): Promise<void> {
@@ -1097,11 +1122,9 @@ export async function paintStrip(
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   for (let i = 0; i < N; i++) {
-    const slideCanvas = document.createElement("canvas");
-    slideCanvas.width = F.W;
-    slideCanvas.height = F.H;
+    const slideCanvas = createCanvas(F.W, F.H);
     await paintSlide(slideCanvas, slides[i], settings, i, N);
-    ctx.drawImage(slideCanvas, i * F.W, 0);
+    ctx.drawImage(toDrawable(slideCanvas), i * F.W, 0);
   }
 }
 

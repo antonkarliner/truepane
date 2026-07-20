@@ -1,5 +1,24 @@
 // Shared types for Truepane.
 
+// Minimal structural types for the rendering surface, so the core can run
+// against both DOM objects (HTMLCanvasElement / HTMLImageElement) and Node
+// implementations (e.g. @napi-rs/canvas) without naming either. The browser
+// types satisfy these structurally — no casts needed at call sites.
+export interface CanvasLike {
+  width: number;
+  height: number;
+  getContext(contextId: "2d"): CanvasRenderingContext2D | null;
+}
+
+/** A drawImage-able pixel source. `naturalWidth`/`naturalHeight` are present
+ * on HTMLImageElement and preferred over `width`/`height` when set. */
+export interface ImageSourceLike {
+  width: number;
+  height: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
+}
+
 export interface RoundRect {
   x: number;
   y: number;
@@ -148,7 +167,7 @@ export interface Settings {
 export interface Slide {
   title: string;
   subhead: string;
-  image: HTMLImageElement | null;
+  image: ImageSourceLike | null;
   imageDataUrl: string | null;
   background?: Background;
   titleColor?: string;
