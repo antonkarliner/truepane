@@ -4,74 +4,22 @@ import JSZip from "jszip";
 import { Sidebar } from "./Sidebar";
 import { MobileLayout } from "./MobileLayout";
 import { SlidePreview } from "./components";
-import { dimFor, getFrame, paintSlide, paintStrip } from "./render";
-import { FONT_OPTIONS, STORAGE_KEY, defaultState } from "./constants";
-import type { AppState, Background, Settings, Slide, SlideText } from "./types";
+import { dimFor, getFrame, paintSlide, paintStrip } from "./core/render";
+import { FONT_OPTIONS, STORAGE_KEY, defaultState } from "./core/constants";
+import { normalizeAppState } from "./core/normalize";
+import type { AppState, Background, Settings, Slide, SlideText } from "./core/types";
 
 // ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
-// Merge a persisted/imported background onto current defaults, and migrate the
-// old single `pattern` field to the new fill + shape split.
-function normalizeBackground(raw: unknown): Background {
-  const base = defaultState().settings.background;
-  const src = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const b = { ...base, ...src } as unknown as Background & { pattern?: string };
-  if (b.pattern) {
-    if (b.pattern === "linear" || b.pattern === "radial") {
-      b.fill = b.pattern;
-      b.shape = "none";
-    } else if (b.pattern === "solid") {
-      b.fill = "solid";
-      b.shape = "none";
-    } else {
-      b.fill = "solid";
-      b.shape = b.pattern as Background["shape"];
-    }
-    delete b.pattern;
-  }
-  return b;
-}
-
 function loadState(): AppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultState();
-    const parsed = JSON.parse(raw);
-    const s = defaultState();
-    if (parsed.settings) Object.assign(s.settings, parsed.settings);
-    s.settings.background = normalizeBackground(parsed.settings?.background);
-    if (parsed.slides) {
-      s.slides = parsed.slides.map((sl: Partial<Slide>) => ({
-        title: sl.title || "",
-        subhead: sl.subhead || "",
-        image: null,
-        imageDataUrl: sl.imageDataUrl || null,
-        background: sl.background ? normalizeBackground(sl.background) : undefined,
-        translations: normalizeTranslations(sl.translations),
-      }));
-    }
-    return s;
+    return normalizeAppState(JSON.parse(raw));
   } catch {
     return defaultState();
   }
-}
-
-// Light guard for persisted/imported per-language translations: keep only an
-// object of { title, subhead } string pairs; drop anything malformed.
-function normalizeTranslations(raw: unknown): Record<string, SlideText> | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const out: Record<string, SlideText> = {};
-  for (const [code, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (v && typeof v === "object") {
-      const t = v as Record<string, unknown>;
-      out[code] = {
-        title: typeof t.title === "string" ? t.title : "",
-        subhead: typeof t.subhead === "string" ? t.subhead : "",
-      };
-    }
-  }
-  return Object.keys(out).length ? out : undefined;
 }
 
 function persistState(state: AppState): void {
@@ -500,20 +448,7 @@ export function App() {
 
   const importJson = async (file: File) => {
     const text = await file.text();
-    const parsed = JSON.parse(text);
-    const s = defaultState();
-    if (parsed.settings) Object.assign(s.settings, parsed.settings);
-    s.settings.background = normalizeBackground(parsed.settings?.background);
-    if (parsed.slides) {
-      s.slides = parsed.slides.map((sl: Partial<Slide>) => ({
-        title: sl.title || "",
-        subhead: sl.subhead || "",
-        image: null,
-        imageDataUrl: sl.imageDataUrl || null,
-        background: sl.background ? normalizeBackground(sl.background) : undefined,
-        translations: normalizeTranslations(sl.translations),
-      }));
-    }
+    const s = normalizeAppState(JSON.parse(text));
     const slides = await hydrateImages(s.slides);
     setState({ ...s, slides });
     setSelectedIndex(0);

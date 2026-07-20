@@ -116,6 +116,56 @@ printf '%s' 'your-password' | shasum -a 256   # put the hash in .env
 It's a deterrent, not real security (it's a static client app) — meant to be removed
 after beta.
 
+## Use with AI agents (MCP)
+
+Truepane ships a local [MCP](https://modelcontextprotocol.io) server, so an AI agent
+(Claude Code, Codex, …) can take simulator screenshots and turn them into store-ready
+slides without a human driving the browser UI. It renders with a native canvas
+(`@napi-rs/canvas`) — screenshots are read from local paths and PNGs are written to
+local paths; nothing is uploaded anywhere, and no configuration or env vars are
+needed: the agent is the LLM, so styling and translation are its own judgment calls
+(the web app's AI helpers are not involved).
+
+Add it to Claude Code from the published package — no checkout needed:
+
+```sh
+claude mcp add truepane -- npx -y truepane-mcp
+```
+
+The server lives in [`packages/truepane-mcp`](packages/truepane-mcp) and is
+published to npm as [`truepane-mcp`](https://www.npmjs.com/package/truepane-mcp).
+To run it from a repo checkout instead (for development):
+
+```sh
+npm install
+claude mcp add truepane -- npx tsx server/mcp/index.ts   # run from source
+# or build the standalone bundle:
+npm run mcp:build          # → packages/truepane-mcp/dist/index.js
+```
+
+### Workflow the tools expect
+
+1. `list_options` — discover platforms (with exact store pixel sizes), fonts, fills,
+   shapes.
+2. `create_project` — slide titles/subheads + absolute screenshot file paths.
+3. `set_style` — colors, background, typography, chosen with the agent's own design
+   judgment (`suggest_palette_from_screenshot` extracts an accent + background tint
+   from a screenshot with pure local math if a starting point helps).
+4. `render` — writes full-resolution PNGs (e.g. iPhone 6.9″ = 1320×2868) into an
+   output dir you pass, and returns a small inline preview to inspect. Adjust and
+   re-render until it looks right.
+5. `set_translations` — the agent translates the slide texts itself and stores the
+   results per language; then `render` with `language: "all"` writes per-language
+   subfolders (`source/`, `es/`, …), matching the web app's all-languages ZIP.
+6. `export_project` / `load_project` — round-trip the project JSON with the web
+   app's Import/Export Project, so a human can fine-tune the agent's work (or vice
+   versa).
+
+Google Fonts are fetched on demand and cached in `~/.cache/truepane/fonts` (Inter is
+bundled, so offline rendering works out of the box). For non-Latin target languages,
+pick a font that covers the script (Inter covers Cyrillic/Greek; Noto Sans JP/KR for
+CJK) — unlike browsers, server-side rendering has no per-glyph system-font fallback.
+
 ## Deployment
 
 Builds to a static site in `dist/` — deploy anywhere. **Cloudflare Pages** is recommended

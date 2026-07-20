@@ -17,7 +17,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; height: 100%; }
+html, body { margin: 0; padding: 0; min-height: 100%; }
 body {
   background: var(--bg);
   color: var(--ink);
@@ -558,13 +558,92 @@ button { cursor: pointer; font: inherit; }
 [data-theme="dark"] .add-card { background: rgba(255,255,255,0.02); }
 [data-theme="dark"] .bg-preset.active { background: rgba(255,255,255,0.06); }
 
+/* Crawlable product content below the tool. The generator remains the first viewport. */
+.seo-content {
+  background: #f6f3ec;
+  color: #1a1612;
+  border-top: 1px solid rgba(26,22,18,0.10);
+  padding: 72px 24px 84px;
+}
+.seo-content__inner {
+  width: min(1040px, 100%);
+  margin: 0 auto;
+}
+.seo-content__eyebrow {
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  margin: 0 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(26,22,18,0.62);
+}
+.seo-content h1 {
+  max-width: 760px;
+  margin: 0;
+  font-size: clamp(34px, 5vw, 68px);
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+.seo-content__lead {
+  max-width: 720px;
+  margin: 24px 0 0;
+  font-size: 18px;
+  line-height: 1.6;
+  color: rgba(26,22,18,0.72);
+}
+.seo-content__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 44px;
+}
+.seo-content article {
+  border-top: 2px solid rgba(26,22,18,0.18);
+  padding-top: 16px;
+}
+.seo-content h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  line-height: 1.25;
+}
+.seo-content article p,
+.seo-content details p {
+  margin: 0;
+  color: rgba(26,22,18,0.68);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.seo-content__faq {
+  margin-top: 52px;
+  max-width: 760px;
+}
+.seo-content__faq > h2 {
+  margin-bottom: 14px;
+}
+.seo-content details {
+  border-top: 1px solid rgba(26,22,18,0.14);
+  padding: 14px 0;
+}
+.seo-content details:last-child {
+  border-bottom: 1px solid rgba(26,22,18,0.14);
+}
+.seo-content summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 15px;
+}
+.seo-content details p {
+  margin-top: 10px;
+}
+
 /* ─────────────────────────────────────────────
    Mobile layout  (≤ 768px)
    ───────────────────────────────────────────── */
 @media (max-width: 768px) {
 
   /* Use dvh so the layout accounts for the collapsing address bar */
-  html, body, #root { height: 100dvh; overflow: hidden; }
+  html, body { min-height: 100%; }
+  #root { height: 100dvh; overflow: hidden; }
 
   .mobile-layout {
     display: flex;
@@ -855,4 +934,25 @@ button { cursor: pointer; font: inherit; }
 }
 [data-theme="dark"] .mobile-full-btn {
   background: rgba(39,35,48,0.88);
+}
+
+@media (max-width: 860px) {
+  .seo-content {
+    padding: 52px 18px 64px;
+  }
+  .seo-content__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .seo-content__grid {
+    grid-template-columns: 1fr;
+  }
+  .seo-content h1 {
+    font-size: 36px;
+  }
+  .seo-content__lead {
+    font-size: 16px;
+  }
 }

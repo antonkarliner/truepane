@@ -1,0 +1,44 @@
+{
+  "name": "truepane-mcp",
+  "version": "0.1.0",
+  "description": "Local MCP server for Truepane — turn raw app screenshots into store-ready App Store / Google Play slides (device frames, generated backgrounds, agent-supplied localization) with a native canvas. Zero config.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "truepane-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@napi-rs/canvas": "^1.0.2",
+    "zod": "^4.4.3"
+  },
+  "scripts": {
+    "prepack": "npm --prefix ../.. run mcp:build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/antonkarliner/truepane.git",
+    "directory": "packages/truepane-mcp"
+  },
+  "homepage": "https://github.com/antonkarliner/truepane/tree/main/packages/truepane-mcp#readme",
+  "bugs": "https://github.com/antonkarliner/truepane/issues",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "app-store",
+    "screenshots",
+    "google-play",
+    "canvas",
+    "ai-agent",
+    "truepane"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
