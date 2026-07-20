@@ -6,7 +6,7 @@ import { MobileLayout } from "./MobileLayout";
 import { SlidePreview } from "./components";
 import { dimFor, getFrame, paintSlide, paintStrip } from "./core/render";
 import { FONT_OPTIONS, STORAGE_KEY, defaultState } from "./core/constants";
-import { normalizeAppState } from "./core/normalize";
+import { normalizeAppState, serializeTranslations } from "./core/normalize";
 import type { AppState, Background, Settings, Slide, SlideText } from "./core/types";
 
 // ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ function persistState(state: AppState): void {
         subhead: s.subhead,
         imageDataUrl: s.imageDataUrl || null,
         background: s.background,
-        translations: s.translations,
+        translations: serializeTranslations(s.translations),
       })),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -52,25 +52,43 @@ function resolveSlide(slide: Slide, lang: string): Slide {
     ...slide,
     title: t.title?.trim() ? t.title : slide.title,
     subhead: t.subhead?.trim() ? t.subhead : slide.subhead,
+    image: t.image ?? slide.image,
+    imageDataUrl: t.imageDataUrl ?? slide.imageDataUrl,
   };
 }
 
-// Convert imageDataUrl strings back to HTMLImageElements for rendering.
+// Decode one imageDataUrl to an HTMLImageElement (null-safe).
+function decodeImage(dataUrl: string | null | undefined): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    if (!dataUrl) {
+      resolve(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
+// Convert imageDataUrl strings back to HTMLImageElements for rendering — both
+// the base screenshot and any per-locale translation screenshots.
 async function hydrateImages(slides: Slide[]): Promise<Slide[]> {
   return Promise.all(
-    slides.map(
-      (s) =>
-        new Promise<Slide>((resolve) => {
-          if (!s.imageDataUrl) {
-            resolve(s);
-            return;
-          }
-          const img = new Image();
-          img.onload = () => resolve({ ...s, image: img });
-          img.onerror = () => resolve(s);
-          img.src = s.imageDataUrl;
-        }),
-    ),
+    slides.map(async (s) => {
+      const image = (await decodeImage(s.imageDataUrl)) ?? s.image;
+      let translations = s.translations;
+      if (translations) {
+        const entries = await Promise.all(
+          Object.entries(translations).map(async ([code, t]) => {
+            const timg = t.imageDataUrl ? await decodeImage(t.imageDataUrl) : null;
+            return [code, timg ? { ...t, image: timg } : t] as const;
+          }),
+        );
+        translations = Object.fromEntries(entries);
+      }
+      return { ...s, image, translations };
+    }),
   );
 }
 
@@ -434,7 +452,7 @@ export function App() {
         subhead: s.subhead,
         imageDataUrl: s.imageDataUrl || null,
         background: s.background,
-        translations: s.translations,
+        translations: serializeTranslations(s.translations),
       })),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });

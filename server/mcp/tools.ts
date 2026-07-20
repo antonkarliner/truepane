@@ -20,7 +20,7 @@ import {
   RING_LAYOUTS,
   SHAPE_FAMILIES,
 } from "../../src/core/render";
-import type { AppState, Background, CanvasLike, LanguageTarget, Settings, Slide, SlideText } from "../../src/core/types";
+import type { AppState, Background, CanvasLike, ImageSourceLike, LanguageTarget, Settings, Slide, SlideText } from "../../src/core/types";
 import { makeCanvas, paletteOfImage, pngBuffer, tryLoadImage } from "./canvas";
 import { ensureFontsForState } from "./fonts";
 import {
@@ -86,30 +86,60 @@ function assertPlatform(platform: string): void {
 
 // Warn (not fail) when a screenshot's aspect ratio is off from the device
 // screen — it will be center-crop-filled, so mild mismatch is fine.
-function aspectNote(slideNo: number, img: { width: number; height: number }, platform: string): string | null {
+function aspectNote(label: string, img: { width: number; height: number }, platform: string): string | null {
   const S = getFrame(platform).SCREEN;
   const imgAspect = img.width / img.height;
   const screenAspect = S.w / S.h;
   const rel = Math.abs(imgAspect - screenAspect) / screenAspect;
   if (rel > 0.02) {
     return (
-      `slide ${slideNo}: screenshot aspect ${img.width}x${img.height} (${imgAspect.toFixed(3)}) ` +
+      `${label}: screenshot aspect ${img.width}x${img.height} (${imgAspect.toFixed(3)}) ` +
       `differs from the ${platform} screen aspect (${screenAspect.toFixed(3)}) — it will be scaled to fill and center-cropped`
     );
   }
   return null;
 }
 
-async function attachScreenshot(slide: Slide, filePath: string, platform: string, slideNo: number, notes: string[]): Promise<void> {
+// Load a screenshot file and write it into any image-bearing target (a base
+// slide or a per-locale translation entry), collecting warnings.
+async function applyScreenshot(
+  target: { image?: ImageSourceLike | null; imageDataUrl?: string | null },
+  filePath: string,
+  platform: string,
+  label: string,
+  notes: string[],
+): Promise<void> {
   const { dataUrl, image } = await loadScreenshot(filePath);
-  slide.imageDataUrl = dataUrl;
-  slide.image = image;
+  target.imageDataUrl = dataUrl;
+  target.image = image;
   if (!image) {
-    notes.push(`slide ${slideNo}: could not decode image at ${filePath} — the screen will show a placeholder`);
+    notes.push(`${label}: could not decode image at ${filePath} — the screen will show a placeholder`);
     return;
   }
-  const note = aspectNote(slideNo, image, platform);
+  const note = aspectNote(label, image, platform);
   if (note) notes.push(note);
+}
+
+// Ensure a locale is in settings.languages so language:"all" renders it. Adds
+// { code, name } if new; for an existing code, only updates the name when one is
+// explicitly given (so a screenshot-only call can't clobber a human label).
+function mergeLanguage(state: AppState, code: string, name?: string): void {
+  const existing = state.settings.languages ?? [];
+  const at = existing.findIndex((l) => l.code === code);
+  if (at >= 0) {
+    state.settings.languages = name ? existing.map((l, i) => (i === at ? { ...l, name } : l)) : existing;
+  } else {
+    const lang: LanguageTarget = { code, name: name || code };
+    state.settings.languages = [...existing, lang];
+  }
+}
+
+// Ensure slide.translations[code] exists (empty text falls back to base at
+// render time) and return it, so a per-locale screenshot can attach to it.
+function ensureTranslation(slide: Slide, code: string): SlideText {
+  const current = slide.translations?.[code] ?? { title: "", subhead: "" };
+  slide.translations = { ...slide.translations, [code]: current };
+  return slide.translations[code];
 }
 
 function summarize(state: AppState, id: string): string {
@@ -131,6 +161,8 @@ function resolveSlide(slide: Slide, lang: string): Slide {
     ...slide,
     title: t.title?.trim() ? t.title : slide.title,
     subhead: t.subhead?.trim() ? t.subhead : slide.subhead,
+    image: t.image ?? slide.image,
+    imageDataUrl: t.imageDataUrl ?? slide.imageDataUrl,
   };
 }
 
@@ -242,7 +274,7 @@ export function registerTools(server: McpServer): void {
         const s = slides[i];
         const slide: Slide = { title: s.title, subhead: s.subhead ?? "", image: null, imageDataUrl: null };
         if (s.screenshot_path) {
-          await attachScreenshot(slide, s.screenshot_path, state.settings.platform, i + 1, notes);
+          await applyScreenshot(slide, s.screenshot_path, state.settings.platform, `slide ${i + 1}`, notes);
         }
         state.slides.push(slide);
       }
@@ -291,7 +323,7 @@ export function registerTools(server: McpServer): void {
           translations: prev?.translations,
         };
         if (s.screenshot_path) {
-          await attachScreenshot(slide, s.screenshot_path, state.settings.platform, i + 1, notes);
+          await applyScreenshot(slide, s.screenshot_path, state.settings.platform, `slide ${i + 1}`, notes);
         }
         next.push(slide);
       }
@@ -308,7 +340,11 @@ export function registerTools(server: McpServer): void {
       description:
         "Attach or replace screenshots on existing slides by 0-based index, from absolute local file paths " +
         "(PNG/JPEG/WebP). Images are scaled to fill the device screen and center-cropped; aspect mismatches are " +
-        "reported as warnings, not errors.",
+        "reported as warnings, not errors. Pass language (a locale code, e.g. \"ar\") to set a screenshot for " +
+        "just that locale instead of the base slide — useful when your app UI is itself localized, so each " +
+        'language renders its own screenshot. A locale screenshot with no translated text still falls back to ' +
+        "the base title/subhead; the locale is added to settings.languages so render language:\"all\" includes " +
+        "it. Omit language to set the base screenshot (used by every locale that has none of its own).",
       inputSchema: {
         project_id: z.string().describe("Project id"),
         screenshots: z
@@ -316,6 +352,14 @@ export function registerTools(server: McpServer): void {
             z.object({
               index: z.number().int().min(0).describe("0-based slide index"),
               path: z.string().describe("Absolute path to the screenshot file"),
+              language: z
+                .string()
+                .optional()
+                .describe('Locale code for a per-language screenshot (e.g. "ar"); omit for the base slide'),
+              language_name: z
+                .string()
+                .optional()
+                .describe('Human label when introducing a new language (e.g. "Arabic"); defaults to the code'),
             }),
           )
           .min(1),
@@ -325,11 +369,18 @@ export function registerTools(server: McpServer): void {
       const project = getProject(project_id);
       const state = project.state;
       const notes: string[] = [];
-      for (const { index, path: p } of screenshots) {
+      for (const { index, path: p, language, language_name } of screenshots) {
         if (index >= state.slides.length) {
           throw new Error(`Slide index ${index} out of range (project has ${state.slides.length} slides).`);
         }
-        await attachScreenshot(state.slides[index], p, state.settings.platform, index + 1, notes);
+        const slide = state.slides[index];
+        if (language) {
+          const target = ensureTranslation(slide, language);
+          await applyScreenshot(target, p, state.settings.platform, `slide ${index + 1} [${language}]`, notes);
+          mergeLanguage(state, language, language_name);
+        } else {
+          await applyScreenshot(slide, p, state.settings.platform, `slide ${index + 1}`, notes);
+        }
       }
       const noteBlock = notes.length ? `\nNotes:\n${notes.map((n) => `- ${n}`).join("\n")}` : "";
       return text(`${summarize(state, project.id)}${noteBlock}`);
@@ -589,6 +640,9 @@ export function registerTools(server: McpServer): void {
         "Translations are stored on the slides (slide.translations) and the languages merged into " +
         "settings.languages, exactly like the web app — so the project round-trips through export_project. " +
         'Then render with language:"all" for per-language folders (or one code to inspect a single language). ' +
+        "Each slide entry may also include screenshot_path to give that locale its own screenshot (for apps " +
+        "whose UI is itself localized — e.g. an Arabic build); omit it and the locale reuses the base " +
+        "screenshot. You can also set locale screenshots separately with set_screenshots (pass language). " +
         "For non-Latin scripts, pick a fontFamily that covers them (Inter covers Cyrillic/Greek, Noto Sans " +
         'JP/KR/SC cover CJK, "Noto Sans Arabic" covers Arabic). Arabic is shaped and laid out right-to-left ' +
         "automatically. Server-side rendering has no per-glyph system-font fallback, so glyphs a font lacks " +
@@ -605,10 +659,14 @@ export function registerTools(server: McpServer): void {
                   z.object({
                     title: z.string().describe("Translated title (empty = fall back to base title)"),
                     subhead: z.string().optional().describe("Translated subhead (empty/omitted = fall back to base subhead)"),
+                    screenshot_path: z
+                      .string()
+                      .optional()
+                      .describe("Absolute path to this locale's own screenshot for this slide (optional; omit to reuse the base)"),
                   }),
                 )
                 .min(1)
-                .describe("Translated texts, aligned 1:1 with the project's slides (same count, same order)"),
+                .describe("Translated texts (and optional per-locale screenshots), aligned 1:1 with the project's slides"),
             }),
           )
           .min(1),
@@ -626,21 +684,26 @@ export function registerTools(server: McpServer): void {
             "Send one { title, subhead } per slide, in slide order, for every language.",
         );
       }
+      const notes: string[] = [];
       for (const t of translations) {
-        const items: SlideText[] = t.slides.map((s) => ({ title: s.title, subhead: s.subhead ?? "" }));
-        state.slides.forEach((slide, i) => {
-          slide.translations = { ...slide.translations, [t.code]: items[i] };
-        });
-        const lang: LanguageTarget = { code: t.code, name: t.name };
-        const existing = state.settings.languages ?? [];
-        const at = existing.findIndex((l) => l.code === t.code);
-        state.settings.languages =
-          at >= 0 ? existing.map((l, i) => (i === at ? lang : l)) : [...existing, lang];
+        for (let i = 0; i < t.slides.length; i++) {
+          const s = t.slides[i];
+          const entry = ensureTranslation(state.slides[i], t.code);
+          entry.title = s.title;
+          entry.subhead = s.subhead ?? "";
+          if (s.screenshot_path) {
+            await applyScreenshot(entry, s.screenshot_path, state.settings.platform, `slide ${i + 1} [${t.code}]`, notes);
+          }
+        }
+        mergeLanguage(state, t.code, t.name);
       }
+      const withShots = translations.filter((t) => t.slides.some((s) => s.screenshot_path)).map((t) => t.code);
+      const noteBlock = notes.length ? `\nNotes:\n${notes.map((n) => `- ${n}`).join("\n")}` : "";
       return text(
-        `Stored translations for ${n} slides in: ${translations.map((t) => t.code).join(", ")}.\n` +
+        `Stored translations for ${n} slides in: ${translations.map((t) => t.code).join(", ")}` +
+          `${withShots.length ? ` (with per-locale screenshots: ${withShots.join(", ")})` : ""}.\n` +
           `settings.languages: ${(state.settings.languages ?? []).map((l) => l.code).join(", ")}\n` +
-          `Next: render with language:"all" for per-language folders, or a single code to inspect one language.`,
+          `Next: render with language:"all" for per-language folders, or a single code to inspect one language.${noteBlock}`,
       );
     },
   );
