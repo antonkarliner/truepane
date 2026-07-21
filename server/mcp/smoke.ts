@@ -352,6 +352,23 @@ async function main(): Promise<void> {
       console.error("variable-weight check: skipped (SF not installed)");
     }
 
+    // 11) variable Google font: Inter's full weight range resolves via the
+    // single-file variable font, so 900 differs from 700. Static Inter tops out
+    // at 700 and would render both identically. Uses the network like the other
+    // font fetches; a fetch failure falls back to static and this would flag it.
+    await client.callTool({ name: "set_style", arguments: { project_id: "smoke", fontFamily: "Inter", titleWeight: 700 } });
+    const inter7 = path.join(outDir, "inter700");
+    await client.callTool({ name: "render", arguments: { project_id: "smoke", output_dir: inter7, what: "slides", scale: 0.5 } });
+    await client.callTool({ name: "set_style", arguments: { project_id: "smoke", titleWeight: 900 } });
+    const inter9 = path.join(outDir, "inter900");
+    await client.callTool({ name: "render", arguments: { project_id: "smoke", output_dir: inter9, what: "slides", scale: 0.5 } });
+    assert.notDeepEqual(
+      fs.readFileSync(path.join(inter9, "slide-01.png")),
+      fs.readFileSync(path.join(inter7, "slide-01.png")),
+      "Inter slide-01 should differ at weight 900 vs 700 (single-file variable font resolves the full range)",
+    );
+    console.error("variable Google font (Inter 700 vs 900): OK");
+
     console.error(`\nSMOKE OK — inspect renders in ${outDir}`);
     console.log(outDir); // machine-readable: the only stdout line
   } finally {
