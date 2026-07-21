@@ -166,8 +166,10 @@ export interface Settings {
   customFont: CustomFont | null;
   titleColor: string;
   titleScale: number;
+  titleWeight: number; // font weight 100..900 (default 700)
   subheadColor: string;
   subtitleScale: number;
+  subtitleWeight: number; // font weight 100..900 (default 400)
   background: Background;
   languages?: LanguageTarget[];
   translationContext?: string;
