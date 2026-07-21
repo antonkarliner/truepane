@@ -327,6 +327,31 @@ async function main(): Promise<void> {
       "loaded project should render uk differently from base — translations survived the round-trip",
     );
 
+    // 10) variable-font weight axis (macOS only): San Francisco must resolve
+    // Heavy/Black, so -apple-system at 900 differs from 700. Without driving the
+    // wght axis, @napi-rs/canvas quantizes both to Bold and they'd be identical.
+    // Skipped where SF isn't installed (Linux/CI).
+    const SF_PATH = "/System/Library/Fonts/SFNS.ttf";
+    if (fs.existsSync(SF_PATH)) {
+      await client.callTool({
+        name: "set_style",
+        arguments: { project_id: "smoke", fontFamily: "-apple-system", titleWeight: 700 },
+      });
+      const sf7 = path.join(outDir, "sf700");
+      await client.callTool({ name: "render", arguments: { project_id: "smoke", output_dir: sf7, what: "slides", scale: 0.5 } });
+      await client.callTool({ name: "set_style", arguments: { project_id: "smoke", titleWeight: 900 } });
+      const sf9 = path.join(outDir, "sf900");
+      await client.callTool({ name: "render", arguments: { project_id: "smoke", output_dir: sf9, what: "slides", scale: 0.5 } });
+      assert.notDeepEqual(
+        fs.readFileSync(path.join(sf9, "slide-01.png")),
+        fs.readFileSync(path.join(sf7, "slide-01.png")),
+        "SF (-apple-system) slide-01 should differ at weight 900 vs 700 (variable wght axis)",
+      );
+      console.error("variable-weight check (SF 700 vs 900): OK");
+    } else {
+      console.error("variable-weight check: skipped (SF not installed)");
+    }
+
     console.error(`\nSMOKE OK — inspect renders in ${outDir}`);
     console.log(outDir); // machine-readable: the only stdout line
   } finally {
