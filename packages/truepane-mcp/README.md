@@ -49,10 +49,11 @@ client's `mcpServers` block:
    fonts, background fills, and shapes.
 2. **`create_project`** — slide titles/subheads plus absolute screenshot file
    paths.
-3. **`set_style`** — colors, background, and typography, chosen with the agent's
-   own design judgment. `suggest_palette_from_screenshot` extracts an accent +
-   background tint from a screenshot with pure local math if a starting point
-   helps.
+3. **`set_style`** — colors, background, and typography (font,
+   `titleScale`/`subtitleScale`, `titleWeight`/`subtitleWeight` from 100–900),
+   chosen with the agent's own design judgment. `suggest_palette_from_screenshot`
+   extracts an accent + background tint from a screenshot with pure local math if
+   a starting point helps.
 4. **`render`** — writes full-resolution PNGs (e.g. iPhone 6.9″ = 1320×2868)
    into an output directory you pass, and returns a small inline preview to
    inspect. Adjust and re-render until it looks right.

@@ -1010,8 +1010,9 @@ function paintText(
   const title = slide.title || "";
   const titleRtl = RTL_CHARS.test(title);
   const titleScale = settings.titleScale ?? 1;
+  const titleWeight = settings.titleWeight ?? T.titleWeight;
   ctx.fillStyle = slide.titleColor ?? (settings.titleColor || "#1a1612");
-  ctx.font = `${T.titleWeight} ${Math.round(T.titleFontSize * titleScale)}px ${font}`;
+  ctx.font = `${titleWeight} ${Math.round(T.titleFontSize * titleScale)}px ${font}`;
   ctx.textAlign = titleRtl ? "right" : "left";
   ctx.direction = titleRtl ? "rtl" : "ltr";
   const titleX = titleRtl ? F.W - T.rightPad : T.leftPad;
@@ -1026,8 +1027,9 @@ function paintText(
   if (slide.subhead) {
     const subRtl = RTL_CHARS.test(slide.subhead);
     const scale = settings.subtitleScale ?? 1;
+    const subheadWeight = settings.subtitleWeight ?? T.subheadWeight;
     ctx.fillStyle = slide.subheadColor ?? (settings.subheadColor || "rgba(26,22,18,0.62)");
-    ctx.font = `${T.subheadWeight} ${Math.round(T.subheadFontSize * scale)}px ${font}`;
+    ctx.font = `${subheadWeight} ${Math.round(T.subheadFontSize * scale)}px ${font}`;
     ctx.textAlign = subRtl ? "right" : "left";
     ctx.direction = subRtl ? "rtl" : "ltr";
     const subX = subRtl ? F.W - T.rightPad : T.leftPad;
