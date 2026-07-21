@@ -996,6 +996,19 @@ function familyToCss(family: string): string {
 // right edge instead of the left.
 const RTL_CHARS = /[֐-׿؀-ۿݐ-ݿࢠ-ࣿיִ-﷿ﹰ-﻿]/;
 
+// Drive a variable font's weight (`wght`) axis to the exact requested weight.
+// The Node canvas (@napi-rs/canvas) otherwise quantizes a variable font to just
+// Regular/Bold from the font-shorthand weight — so SF Heavy/Black (800/900)
+// render as plain Bold. Setting fontVariationSettings makes it interpolate the
+// true weight. The property exists only on the Node canvas; browsers already
+// interpolate variable fonts from the shorthand, so this is a no-op there, and
+// on a non-variable font it has no axis to move.
+function applyWeightAxis(ctx: CanvasRenderingContext2D, weight: number): void {
+  if ("fontVariationSettings" in ctx) {
+    (ctx as unknown as { fontVariationSettings: string }).fontVariationSettings = `'wght' ${weight}`;
+  }
+}
+
 function paintText(
   ctx: CanvasRenderingContext2D,
   slide: Slide,
@@ -1013,6 +1026,7 @@ function paintText(
   const titleWeight = settings.titleWeight ?? T.titleWeight;
   ctx.fillStyle = slide.titleColor ?? (settings.titleColor || "#1a1612");
   ctx.font = `${titleWeight} ${Math.round(T.titleFontSize * titleScale)}px ${font}`;
+  applyWeightAxis(ctx, titleWeight);
   ctx.textAlign = titleRtl ? "right" : "left";
   ctx.direction = titleRtl ? "rtl" : "ltr";
   const titleX = titleRtl ? F.W - T.rightPad : T.leftPad;
@@ -1030,6 +1044,7 @@ function paintText(
     const subheadWeight = settings.subtitleWeight ?? T.subheadWeight;
     ctx.fillStyle = slide.subheadColor ?? (settings.subheadColor || "rgba(26,22,18,0.62)");
     ctx.font = `${subheadWeight} ${Math.round(T.subheadFontSize * scale)}px ${font}`;
+    applyWeightAxis(ctx, subheadWeight);
     ctx.textAlign = subRtl ? "right" : "left";
     ctx.direction = subRtl ? "rtl" : "ltr";
     const subX = subRtl ? F.W - T.rightPad : T.leftPad;
@@ -1044,6 +1059,9 @@ function paintText(
   // Restore defaults so later draws sharing this context are unaffected.
   ctx.textAlign = "left";
   ctx.direction = "ltr";
+  if ("fontVariationSettings" in ctx) {
+    (ctx as unknown as { fontVariationSettings: string }).fontVariationSettings = "";
+  }
 }
 
 // ---------------------------------------------------------------------

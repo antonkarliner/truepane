@@ -191,7 +191,9 @@ Google Fonts are fetched on demand and cached in `~/.cache/truepane/fonts` (Inte
 bundled, so offline rendering works out of the box). The `-apple-system` font renders
 as real San Francisco on macOS — from your own installed system font, which is never
 bundled or redistributed (Apple's font is proprietary) — and falls back to Inter on
-Linux/CI. For non-Latin target languages,
+Linux/CI. Because SF is a variable font, its full weight range resolves (including
+Heavy/Black via `titleWeight`/`subtitleWeight`), not just Regular/Bold. For non-Latin
+target languages,
 pick a font that covers the script (Inter covers Cyrillic/Greek; `Noto Sans JP/KR/SC`
 for CJK; `Noto Sans Arabic` for Arabic, which is shaped and laid out right-to-left
 automatically) — unlike browsers, server-side rendering has no per-glyph system-font
