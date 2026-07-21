@@ -19,8 +19,10 @@ import type { AppState } from "../../src/core/types";
 const CACHE_DIR = path.join(os.homedir(), ".cache", "truepane", "fonts");
 const ASSETS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "assets", "fonts");
 
-// Families already registered with GlobalFonts in this process.
+// Families with some usable face registered in this process.
 const registered = new Set<string>();
+// Families whose full variable font has been loaded (supersedes static faces).
+const variableLoaded = new Set<string>();
 
 function warn(msg: string): void {
   console.error(`[truepane-mcp] ${msg}`);
@@ -72,6 +74,32 @@ function registerSystemFont(family: string): void {
   registerBundled(family);
 }
 
+// A curated set of popular headline fonts whose FULL weight range (Heavy/Black)
+// is worth resolving. Google's css2 API only serves variable fonts as many
+// unicode-range-subsetted woff2 files, which @napi-rs/canvas can't coverage-
+// match across subsets — so for these we fetch the single, unsubsetted variable
+// TTF from Google's font repo instead. That one file registers cleanly with
+// full glyph coverage AND a working wght axis (driven by applyWeightAxis in
+// render.ts). Everything else stays on the static path below (weights ≤ 700).
+// Want another font here? Open an issue or PR — see the README.
+const VARIABLE_FONT_URLS: Record<string, string> = {
+  Inter: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/inter/Inter%5Bopsz,wght%5D.ttf",
+  Manrope: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/manrope/Manrope%5Bwght%5D.ttf",
+  Fraunces: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/fraunces/Fraunces%5BSOFT,WONK,opsz,wght%5D.ttf",
+};
+
+// Download (once) and register the single-file variable font for `family`.
+async function registerVariableFont(family: string, url: string): Promise<boolean> {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  const file = path.join(CACHE_DIR, `${family.replace(/\s+/g, "-")}-var.ttf`);
+  if (!(fs.existsSync(file) && fs.statSync(file).size > 0)) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`variable font HTTP ${res.status} for ${url}`);
+    fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+  }
+  return GlobalFonts.registerFromPath(file, family) != null;
+}
+
 // Resolve a css2 family spec to TTF URLs. An empty User-Agent makes Google
 // serve static truetype files (one @font-face per weight) instead of woff2.
 async function fetchTtfUrls(googleSpec: string): Promise<string[]> {
@@ -96,10 +124,29 @@ async function downloadToCache(url: string): Promise<string> {
 }
 
 /** Ensure `family` (a FONT_OPTIONS id) is registered, downloading and caching
- * its TTFs if needed. Falls back to bundled Inter on any failure. */
+ * as needed. Prefers the single-file variable font (full weight range) for the
+ * curated set, then the static per-weight faces, then bundled Inter. */
 export async function ensureFamily(family: string): Promise<void> {
-  if (registered.has(family)) return;
   const opt = FONT_OPTIONS.find((f) => f.id === family);
+  const varUrl = opt?.google ? VARIABLE_FONT_URLS[family] : undefined;
+
+  // Upgrade the curated set to their full variable font (once) — even if a
+  // bundled/static face is already registered (e.g. Inter at startup), because
+  // the variable font is what unlocks the whole weight range.
+  if (varUrl && !variableLoaded.has(family)) {
+    try {
+      if (await registerVariableFont(family, varUrl)) {
+        registered.add(family);
+        variableLoaded.add(family);
+        return;
+      }
+    } catch (e) {
+      warn(`variable font for "${family}" failed (${e}) — falling back to static faces`);
+    }
+  }
+
+  if (registered.has(family)) return;
+
   if (!opt) {
     warn(`unknown font family "${family}" — rendering with bundled Inter under that name`);
     registerBundled(family);
