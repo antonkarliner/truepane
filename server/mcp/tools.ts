@@ -397,7 +397,8 @@ export function registerTools(server: McpServer): void {
       title: "Set typography, colors, background",
       description:
         "Patch project style. Without slide_index, patches global settings: fontFamily (see list_options), " +
-        "titleColor/subheadColor (CSS colors), titleScale/subtitleScale (multipliers, ~0.5-1.5), platform " +
+        "titleColor/subheadColor (CSS colors), titleScale/subtitleScale (multipliers, ~0.5-1.5), " +
+        "titleWeight/subtitleWeight (font weight 100..900; default 700/400), platform " +
         `(${PLATFORM_IDS.join(" | ")}), and background — a partial patch merged onto the current background. ` +
         "Background fields: fill (solid|linear|radial), shape (see list_options), color, gradientColor, accent, " +
         "accentOpacity (0..1), ringLayout, ringCount (1..8), seed, density (1..8), dotsAligned, gradientAngle. " +
@@ -425,6 +426,8 @@ export function registerTools(server: McpServer): void {
         subheadColor: z.string().optional().describe("Subhead color, e.g. rgba(26,22,18,0.62)"),
         titleScale: z.number().min(0.3).max(2).optional().describe("Title size multiplier (global only)"),
         subtitleScale: z.number().min(0.3).max(2).optional().describe("Subhead size multiplier (global only)"),
+        titleWeight: z.number().int().min(100).max(900).optional().describe("Title font weight 100..900, default 700 (global only)"),
+        subtitleWeight: z.number().int().min(100).max(900).optional().describe("Subhead font weight 100..900, default 400 (global only)"),
         platform: z
           .enum(PLATFORM_IDS as [string, ...string[]])
           .optional()
@@ -432,22 +435,22 @@ export function registerTools(server: McpServer): void {
         background: backgroundSchema.optional().describe("Partial background patch"),
       },
     },
-    async ({ project_id, slide_index, language, fontFamily, titleColor, subheadColor, titleScale, subtitleScale, platform, background }) => {
+    async ({ project_id, slide_index, language, fontFamily, titleColor, subheadColor, titleScale, subtitleScale, titleWeight, subtitleWeight, platform, background }) => {
       const project = getProject(project_id);
       const state = project.state;
       if (language !== undefined) {
         if (slide_index !== undefined) throw new Error("Pass either language or slide_index, not both.");
         if (!fontFamily) throw new Error('set_style with language sets that locale\'s font — pass fontFamily (a font id from list_options).');
-        if (titleColor !== undefined || subheadColor !== undefined || background || titleScale !== undefined || subtitleScale !== undefined || platform) {
-          throw new Error("With language, only fontFamily is applied (per-language font override). Set colors/background/scale/platform without language.");
+        if (titleColor !== undefined || subheadColor !== undefined || background || titleScale !== undefined || subtitleScale !== undefined || titleWeight !== undefined || subtitleWeight !== undefined || platform) {
+          throw new Error("With language, only fontFamily is applied (per-language font override). Set colors/background/scale/weight/platform without language.");
         }
         mergeLanguage(state, language, undefined, fontFamily);
         return text(`Set the font for language "${language}" to "${fontFamily}" (base keeps "${state.settings.fontFamily}").\n${summarize(state, project.id)}`);
       }
       if (slide_index !== undefined) {
-        if (fontFamily || titleScale !== undefined || subtitleScale !== undefined || platform) {
+        if (fontFamily || titleScale !== undefined || subtitleScale !== undefined || titleWeight !== undefined || subtitleWeight !== undefined || platform) {
           throw new Error(
-            "fontFamily/titleScale/subtitleScale/platform are global settings — call set_style without slide_index to change them.",
+            "fontFamily/titleScale/subtitleScale/titleWeight/subtitleWeight/platform are global settings — call set_style without slide_index to change them.",
           );
         }
         const slide = state.slides[slide_index];
@@ -468,6 +471,8 @@ export function registerTools(server: McpServer): void {
       if (subheadColor !== undefined) state.settings.subheadColor = subheadColor;
       if (titleScale !== undefined) state.settings.titleScale = titleScale;
       if (subtitleScale !== undefined) state.settings.subtitleScale = subtitleScale;
+      if (titleWeight !== undefined) state.settings.titleWeight = titleWeight;
+      if (subtitleWeight !== undefined) state.settings.subtitleWeight = subtitleWeight;
       if (background) {
         state.settings.background = patchBackground(state.settings.background, background);
       }
