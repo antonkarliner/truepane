@@ -243,6 +243,39 @@ async function main(): Promise<void> {
       "es/slide-01 should change when the es locale gets its own font override",
     );
 
+    // 7d) configurable text weights on a project that also carries per-locale
+    // font overrides (es → Bricolage above). Render the title light (400 → Inter
+    // Regular) then heavy (800 → Inter's heaviest face): they map to different
+    // faces, so the slide must change — proving titleWeight reaches the canvas.
+    // Leaves the project at 800/400 for the export round-trip below.
+    await client.callTool({
+      name: "set_style",
+      arguments: { project_id: "smoke", titleWeight: 400, subtitleWeight: 400 },
+    });
+    const lightDir = path.join(outDir, "w400");
+    await client.callTool({
+      name: "render",
+      arguments: { project_id: "smoke", output_dir: lightDir, what: "slides", scale: 0.5, language: "all" },
+    });
+    await client.callTool({
+      name: "set_style",
+      arguments: { project_id: "smoke", titleWeight: 800, subtitleWeight: 400 },
+    });
+    const heavyDir = path.join(outDir, "w800");
+    await client.callTool({
+      name: "render",
+      arguments: { project_id: "smoke", output_dir: heavyDir, what: "slides", scale: 0.5, language: "all" },
+    });
+    assert.notDeepEqual(
+      fs.readFileSync(path.join(heavyDir, "source", "slide-01.png")),
+      fs.readFileSync(path.join(lightDir, "source", "slide-01.png")),
+      "source/slide-01 should change between titleWeight 400 and 800",
+    );
+    assert.ok(
+      fs.existsSync(path.join(heavyDir, "es", "slide-01.png")),
+      "es render (per-locale font override) should still be produced with the weights applied",
+    );
+
     // 8) export → load round-trip preserves screenshots AND translations
     const projFile = path.join(tmp, "truepane-project.json");
     await client.callTool({ name: "export_project", arguments: { project_id: "smoke", path: projFile } });
@@ -250,6 +283,8 @@ async function main(): Promise<void> {
     assert.equal(parsed.slides.length, 2);
     assert.ok(parsed.slides[0].imageDataUrl.startsWith("data:image/png;base64,"));
     assert.equal(parsed.settings.background.shape, "bubbles");
+    assert.equal(parsed.settings.titleWeight, 800, "titleWeight should round-trip in exported settings");
+    assert.equal(parsed.settings.subtitleWeight, 400, "subtitleWeight should round-trip in exported settings");
     assert.equal(parsed.slides[0].translations.es.title, "Prepara mejor café");
     assert.ok(
       parsed.slides[1].translations.es.imageDataUrl?.startsWith("data:image/png;base64,"),

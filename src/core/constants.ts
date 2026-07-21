@@ -89,8 +89,10 @@ export function defaultState(): AppState {
       customFont: null,
       titleColor: "#1a1612",
       titleScale: 1,
+      titleWeight: 700,
       subheadColor: "rgba(26,22,18,0.62)",
       subtitleScale: 1,
+      subtitleWeight: 400,
       background: {
         fill: "solid",
         shape: "none",
