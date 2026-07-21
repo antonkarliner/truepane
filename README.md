@@ -4,9 +4,10 @@
 and Google Play — title + subhead text, a device frame, your screenshot, and a generated
 background, exported as individual PNGs, a horizontal strip, or a ZIP.
 
-Everything renders to `<canvas>` in the browser. No screenshots are ever uploaded to
-a server; nothing leaves your machine. The only network feature is an optional AI
-prompt helper (see below), and it only ever sends the text prompt.
+Everything renders to `<canvas>` in the browser. Screenshots stay on your machine.
+Optional AI helpers send only the text you ask them to process (and, when supplied,
+your Groq API key) to the configured Edge Function and model provider. Google Fonts
+are also loaded from Google's CDN unless you use a system or uploaded font.
 
 ## Why this exists
 
@@ -192,8 +193,12 @@ bundled, so offline rendering works out of the box). The `-apple-system` font re
 as real San Francisco on macOS — from your own installed system font, which is never
 bundled or redistributed (Apple's font is proprietary) — and falls back to Inter on
 Linux/CI. Because SF is a variable font, its full weight range resolves (including
-Heavy/Black via `titleWeight`/`subtitleWeight`), not just Regular/Bold. For non-Latin
-target languages,
+Heavy/Black via `titleWeight`/`subtitleWeight`), not just Regular/Bold. A curated set
+of Google fonts — **Inter, Manrope, and Fraunces** — is loaded as a single-file
+variable font too, so their full weight range resolves as well; every other Google
+font uses its static faces (typically up to 700). Want another font's full range?
+Open an issue or PR adding it to `VARIABLE_FONT_URLS` in `server/mcp/fonts.ts`. For
+non-Latin target languages,
 pick a font that covers the script (Inter covers Cyrillic/Greek; `Noto Sans JP/KR/SC`
 for CJK; `Noto Sans Arabic` for Arabic, which is shaped and laid out right-to-left
 automatically) — unlike browsers, server-side rendering has no per-glyph system-font
@@ -210,6 +215,10 @@ output directory `dist`. Set the two `VITE_*` variables in the Pages project to 
 [AGPL-3.0](LICENSE). Because this is a client-side app, the source is distributed to
 every browser — so forks, **including publicly hosted ones**, must make their source
 available under the same license.
+
+The Inter font files bundled with `truepane-mcp` are distributed under the SIL Open
+Font License 1.1; the copyright notice and license travel with them in
+`server/mcp/assets/fonts/LICENSE-Inter.txt` and in the published npm package.
 
 ## Support
 
