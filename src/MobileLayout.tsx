@@ -211,6 +211,7 @@ export function MobileLayout(props: MobileLayoutProps) {
           className="theme-toggle"
           onClick={onToggleTheme}
           title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
           {theme === "dark" ? (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -295,6 +296,7 @@ export function MobileLayout(props: MobileLayoutProps) {
           className="mobile-full-btn"
           onClick={(e) => { e.stopPropagation(); setFullPreview((f) => !f); }}
           title={fullPreview ? "Exit full preview" : "Full preview"}
+          aria-label={fullPreview ? "Exit full preview" : "Full preview"}
         >
           {fullPreview ? (
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

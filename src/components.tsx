@@ -1,5 +1,5 @@
 // UI components for Truepane.
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { dimFor, paintSlide } from "./core/render";
 import type { RingLayout, Settings, Slide } from "./core/types";
 
@@ -73,14 +73,30 @@ export function SlidePreview({
   return (
     <div
       className={"slide-card" + (selected ? " selected" : "")}
-      style={{ width: displayWidth, cursor: eyedropping ? "crosshair" : undefined }}
-      onClick={handleClick}
+      style={{ width: displayWidth }}
+      data-slide-index={slideIndex}
     >
-      <div className="slide-card__index">{String(slideIndex + 1).padStart(2, "0")}</div>
-      <canvas
-        ref={canvasRef}
-        style={{ width: displayWidth, height: displayHeight, display: "block", borderRadius: 12 }}
-      />
+      <div
+        className="slide-card__select"
+        style={{ cursor: eyedropping ? "crosshair" : undefined }}
+        onClick={handleClick}
+        role="button"
+        tabIndex={0}
+        aria-label={`Select slide ${slideIndex + 1}${selected ? ", selected" : ""}`}
+        aria-pressed={selected}
+        onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect();
+          }
+        }}
+      >
+        <div className="slide-card__index">{String(slideIndex + 1).padStart(2, "0")}</div>
+        <canvas
+          ref={canvasRef}
+          style={{ width: displayWidth, height: displayHeight, display: "block", borderRadius: 12 }}
+        />
+      </div>
       {onDelete && (
         <button
           className="slide-card__delete"
@@ -89,6 +105,7 @@ export function SlidePreview({
             onDelete();
           }}
           title="Delete slide"
+          aria-label={`Delete slide ${slideIndex + 1}`}
         >
           ×
         </button>
@@ -245,6 +262,7 @@ export function Segmented({
           key={opt.value}
           className={"segmented__btn" + (value === opt.value ? " active" : "")}
           onClick={() => onChange(opt.value)}
+          aria-pressed={value === opt.value}
         >
           {opt.label}
         </button>
@@ -272,11 +290,12 @@ export function ColorRow({
       <div className="color-row__label">{label}</div>
       <div className="color-row__main">
         <label className="swatch">
-          <input type="color" value={normalizeHex(value)} onChange={(e) => onChange(e.target.value)} />
+          <input aria-label={`${label} color picker`} type="color" value={normalizeHex(value)} onChange={(e) => onChange(e.target.value)} />
           <span className="swatch__chip" style={{ background: value }} />
         </label>
         <input
           className="color-row__text"
+          aria-label={`${label} value`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -367,6 +386,7 @@ export function LayoutSlider({
       <input
         className="slider"
         type="range"
+        aria-label="Ring layout"
         min={0}
         max={last}
         step={1}

@@ -1,5 +1,5 @@
 // Main App component for Truepane.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import JSZip from "jszip";
 import { Sidebar } from "./Sidebar";
 import { MobileLayout } from "./MobileLayout";
@@ -8,6 +8,7 @@ import { dimFor, getFrame, paintSlide, paintStrip } from "./core/render";
 import { FONT_OPTIONS, STORAGE_KEY, defaultState } from "./core/constants";
 import { normalizeAppState, serializeTranslations } from "./core/normalize";
 import type { AppState, Background, Settings, Slide, SlideText } from "./core/types";
+import { applyTheme, initialTheme, type Theme } from "./theme";
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -93,29 +94,6 @@ async function hydrateImages(slides: Slide[]): Promise<Slide[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Theme
-// ---------------------------------------------------------------------------
-const THEME_KEY = "appstore-theme";
-
-function applyFavicon(theme: "light" | "dark") {
-  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-  if (link) link.href = theme === "dark" ? "/favicon-dark.svg" : "/favicon-light.svg";
-}
-
-function initialTheme(): "light" | "dark" {
-  const stored = localStorage.getItem(THEME_KEY);
-  const theme =
-    stored === "light" || stored === "dark"
-      ? stored
-      : window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light";
-  document.documentElement.dataset.theme = theme;
-  applyFavicon(theme);
-  return theme;
-}
-
-// ---------------------------------------------------------------------------
 // Font loading helper — load a Google Font on demand.
 // ---------------------------------------------------------------------------
 const loadedGoogleFonts = new Set<string>();
@@ -143,9 +121,9 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 // Mobile detection
 // ---------------------------------------------------------------------------
 function useMobile() {
-  const [mobile, setMobile] = useState(() => window.innerWidth <= 768);
+  const [mobile, setMobile] = useState(() => window.innerWidth <= 960);
   useEffect(() => {
-    const fn = () => setMobile(window.innerWidth <= 768);
+    const fn = () => setMobile(window.innerWidth <= 960);
     window.addEventListener("resize", fn);
     return () => window.removeEventListener("resize", fn);
   }, []);
@@ -157,22 +135,31 @@ function useMobile() {
 // ---------------------------------------------------------------------------
 export function App() {
   const isMobile = useMobile();
+  const stripRef = useRef<HTMLDivElement>(null);
+  const revealAddedSlide = useRef(false);
+  const stripDrag = useRef<{
+    pointerId: number;
+    startX: number;
+    startScrollLeft: number;
+    moved: boolean;
+  } | null>(null);
+  const suppressStripClick = useRef(false);
+  const suppressStripClickTimer = useRef<number | null>(null);
   const [state, setState] = useState<AppState>(() => defaultState());
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [desktopPreviewWidth, setDesktopPreviewWidth] = useState(300);
   const [hydrated, setHydrated] = useState(false);
   const [, setFontsReady] = useState(0); // bump to trigger rerender on font load
   const [exporting, setExporting] = useState<null | "png" | "strip" | "zip" | "all">(null);
   const [eyedropTarget, setEyedropTarget] = useState<((hex: string) => void) | null>(null);
-  const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
+  const [theme, setTheme] = useState<Theme>(initialTheme);
   // Active preview/edit language: "" = source, otherwise a LanguageTarget.code.
   const [activeLang, setActiveLang] = useState("");
 
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
       const next = t === "dark" ? "light" : "dark";
-      document.documentElement.dataset.theme = next;
-      localStorage.setItem(THEME_KEY, next);
-      applyFavicon(next);
+      applyTheme(next);
       return next;
     });
   }, []);
@@ -204,6 +191,24 @@ export function App() {
       setSelectedIndex(Math.max(0, state.slides.length - 1));
     }
   }, [state.slides.length, selectedIndex]);
+
+  useEffect(() => {
+    if (isMobile || !hydrated) return;
+    const strip = stripRef.current;
+    if (!strip) return;
+    const dim = dimFor(state.settings.platform || "ios");
+    const aspect = dim.W / dim.H;
+    const updateWidth = () => {
+      // Strip padding (64px), card padding (20px), and a small safety gap
+      // stay visible together with the canvas and horizontal scrollbar.
+      const availableCanvasHeight = Math.max(174, strip.clientHeight - 92);
+      setDesktopPreviewWidth(Math.min(300, Math.floor(availableCanvasHeight * aspect)));
+    };
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, [hydrated, isMobile, state.settings.platform]);
 
   // --- Mutators --------------------------------------------------------
   const updateSlide = useCallback((idx: number, patch: Partial<Slide>) => {
@@ -272,13 +277,66 @@ export function App() {
   }, []);
 
   const addSlide = useCallback(() => {
+    if (!isMobile) revealAddedSlide.current = true;
     setState((s) => {
       const next = s.slides.slice();
       next.push({ title: "New slide", subhead: "Add a subhead.", image: null, imageDataUrl: null });
       return { ...s, slides: next };
     });
     setSelectedIndex(state.slides.length); // about to be the new one
-  }, [state.slides.length]);
+  }, [isMobile, state.slides.length]);
+
+  useEffect(() => {
+    if (isMobile || !revealAddedSlide.current) return;
+    const strip = stripRef.current;
+    const card = strip?.querySelector<HTMLElement>(`[data-slide-index="${selectedIndex}"]`);
+    if (!strip || !card) return;
+    revealAddedSlide.current = false;
+    const left = card.offsetLeft - (strip.clientWidth - card.offsetWidth) / 2;
+    requestAnimationFrame(() => strip.scrollTo({ left: Math.max(0, left), behavior: "smooth" }));
+  }, [isMobile, selectedIndex, state.slides.length]);
+
+  const startStripDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest("button, input, textarea, select")) return;
+    const strip = stripRef.current;
+    if (!strip) return;
+    stripDrag.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startScrollLeft: strip.scrollLeft,
+      moved: false,
+    };
+  };
+
+  const moveStripDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = stripDrag.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const dx = e.clientX - drag.startX;
+    if (!drag.moved && Math.abs(dx) > 4) {
+      drag.moved = true;
+      e.currentTarget.classList.add("dragging");
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    if (!drag.moved) return;
+    e.preventDefault();
+    e.currentTarget.scrollLeft = drag.startScrollLeft - dx;
+  };
+
+  const endStripDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = stripDrag.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    e.currentTarget.classList.remove("dragging");
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    if (drag.moved) {
+      suppressStripClick.current = true;
+      if (suppressStripClickTimer.current !== null) window.clearTimeout(suppressStripClickTimer.current);
+      suppressStripClickTimer.current = window.setTimeout(() => {
+        suppressStripClick.current = false;
+        suppressStripClickTimer.current = null;
+      }, 0);
+    }
+    stripDrag.current = null;
+  };
 
   const deleteSlide = useCallback(
     (idx: number) => {
@@ -583,6 +641,7 @@ export function App() {
             <span className="muted">
               {platformDim.storeLabel} · {platformDim.W} × {platformDim.H}
             </span>
+            <span className="muted stage__drag-hint">· Drag canvas to navigate</span>
             {eyedropTarget && (
               <span className="muted">· Click a slide to pick a color (Esc to cancel)</span>
             )}
@@ -591,7 +650,22 @@ export function App() {
             + Add slide
           </button>
         </div>
-        <div className="strip">
+        <div
+          ref={stripRef}
+          className="strip"
+          role="region"
+          aria-label="Slide strip. Drag sideways to navigate between slides."
+          onPointerDown={startStripDrag}
+          onPointerMove={moveStripDrag}
+          onPointerUp={endStripDrag}
+          onPointerCancel={endStripDrag}
+          onClickCapture={(e) => {
+            if (!suppressStripClick.current) return;
+            e.preventDefault();
+            e.stopPropagation();
+            suppressStripClick.current = false;
+          }}
+        >
           {state.slides.map((slide, i) => (
             <SlidePreview
               key={i}
@@ -600,6 +674,11 @@ export function App() {
               slideIndex={i}
               totalSlides={totalSlides}
               selected={i === selectedIndex}
+              displayWidth={
+                i === selectedIndex
+                  ? desktopPreviewWidth
+                  : Math.max(72, Math.round(desktopPreviewWidth * 0.63))
+              }
               onSelect={() => setSelectedIndex(i)}
               onDelete={state.slides.length > 1 ? () => deleteSlide(i) : null}
               eyedropping={!!eyedropTarget}

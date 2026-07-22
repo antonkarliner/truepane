@@ -26,101 +26,81 @@
 <div id="root"></div>
 <section class="seo-content" aria-labelledby="seo-title">
   <div class="seo-content__inner">
-    <p class="seo-content__eyebrow">Browser-based screenshot generator</p>
-    <h1 id="seo-title">Create App Store and Google Play screenshots with Truepane</h1>
-    <p class="seo-content__lead">
-      Truepane helps indie app builders turn product screenshots into store-ready
-      screenshot sets. Add title and subtitle text, choose an iPhone, iPad,
-      Android phone, or Android tablet frame, style a procedural background, and
-      export individual PNGs, one horizontal strip, or a ZIP.
-    </p>
+    <header class="seo-content__intro">
+      <div>
+        <p class="seo-content__eyebrow">What Truepane handles</p>
+        <h1 id="seo-title">From raw captures to store-ready sets.</h1>
+      </div>
+      <p class="seo-content__lead">
+        Frame screenshots for App Store and Google Play, add focused marketing copy,
+        build a cohesive visual system, and export every size you need. Work visually
+        in the browser or let an MCP-capable agent assemble the project for you.
+      </p>
+    </header>
     <div class="seo-content__grid" aria-label="Truepane features">
       <article>
+        <span>01</span>
         <h2>Store-sized frames</h2>
-        <p>
-          Generate screenshots for App Store and Google Play formats, including
-          iPhone 6.9 inch, iPad 13 inch, Android phone, and Android tablet.
-        </p>
+        <p>iPhone, iPad, Android phone, and Android tablet formats are built in.</p>
       </article>
       <article>
-        <h2>Local canvas rendering</h2>
-        <p>
-          Screenshots are rendered in the browser. Uploaded app images stay on
-          your device and are not sent to a server by the generator.
-        </p>
+        <span>02</span>
+        <h2>Local by default</h2>
+        <p>Your screenshots are rendered on-device and stay in your browser.</p>
       </article>
       <article>
+        <span>03</span>
         <h2>Export options</h2>
-        <p>
-          Download a single slide PNG, a horizontal screenshot strip, a ZIP of
-          all slides, or a JSON project file for later editing.
-        </p>
+        <p>Download individual PNGs, a horizontal strip, a ZIP, or editable JSON.</p>
       </article>
       <article>
-        <h2>Optional AI styling</h2>
-        <p>
-          When configured, the AI prompt helper can turn a short style prompt
-          into background and palette settings. The app still works without it.
-        </p>
+        <span>04</span>
+        <h2>Localization-ready</h2>
+        <p>Keep translated copy and locale-specific screenshots in one project.</p>
       </article>
     </div>
-    <div class="seo-content__mcp">
-      <p class="seo-content__eyebrow">For AI agents · MCP</p>
-      <h2>Let an AI agent build your screenshots</h2>
-      <p>
-        Truepane ships an open-source
-        <a href="https://modelcontextprotocol.io">Model Context Protocol</a> server,
-        so coding agents like Claude Code, Codex, and Cursor can frame raw simulator
-        screenshots, style them, localize the text (including right-to-left scripts
-        such as Arabic), and render store-ready PNGs — no browser needed. It runs
-        locally and needs no API keys.
-      </p>
-      <pre class="seo-content__code"><code>npx -y truepane-mcp</code></pre>
-      <p class="seo-content__mcp-links">
-        <a href="https://www.npmjs.com/package/truepane-mcp">npm&nbsp;· truepane-mcp</a>
-        <span aria-hidden="true">·</span>
-        <a href="https://github.com/antonkarliner/truepane/tree/main/packages/truepane-mcp">Docs&nbsp;&amp; source</a>
-      </p>
-    </div>
-    <div class="seo-content__faq" aria-label="Truepane FAQ">
-      <h2>FAQ</h2>
-      <details>
-        <summary>What is Truepane?</summary>
+    <div class="seo-content__lower">
+      <section class="seo-content__mcp">
+        <p class="seo-content__eyebrow">For AI agents · MCP</p>
+        <h2>Build the same project without opening a browser.</h2>
         <p>
-          Truepane is a browser app for making App Store and Google Play
-          screenshot sets with device frames, text overlays, generated
-          backgrounds, and export tools.
+          The open-source <a href="https://modelcontextprotocol.io">Model Context Protocol</a>
+          server lets Codex, Claude Code, and other compatible agents frame screenshots,
+          style sets, localize copy, and render store-ready PNGs locally.
         </p>
-      </details>
-      <details>
-        <summary>Does Truepane upload my app screenshots?</summary>
-        <p>
-          No. Screenshot composition happens locally on canvas in your browser.
-          The optional AI style helper only sends the text prompt when that
-          feature is configured and used.
+        <pre class="seo-content__code"><code>npx -y truepane-mcp</code></pre>
+        <p class="seo-content__mcp-links">
+          <a href="https://www.npmjs.com/package/truepane-mcp">npm&nbsp;· truepane-mcp</a>
+          <span aria-hidden="true">·</span>
+          <a href="https://github.com/antonkarliner/truepane/tree/main/packages/truepane-mcp">Docs&nbsp;&amp; source</a>
         </p>
-      </details>
-      <details>
-        <summary>Can I export screenshots for both App Store and Google Play?</summary>
-        <p>
-          Yes. Truepane includes Apple and Android device formats and exports
-          slide PNGs, horizontal strips, ZIP files, and JSON project backups.
-        </p>
-      </details>
-      <details>
-        <summary>Can AI agents use Truepane?</summary>
-        <p>
-          Yes. Truepane publishes a local Model Context Protocol (MCP) server,
-          <code>truepane-mcp</code>, that any MCP client (Claude Code, Codex,
-          Cursor, and others) can run with <code>npx -y truepane-mcp</code>. An
-          agent can create a project from local screenshots, style it, translate
-          the copy into other languages, and render store-ready PNGs — no API keys
-          required. Projects round-trip with this web app via Import/Export.
-        </p>
-      </details>
+      </section>
+      <section class="seo-content__faq" aria-label="Truepane FAQ">
+        <p class="seo-content__eyebrow">Quick answers</p>
+        <h2>Good to know</h2>
+        <details>
+          <summary>Does Truepane upload my screenshots?</summary>
+          <p>No. Screenshot composition happens locally in your browser.</p>
+        </details>
+        <details>
+          <summary>Can projects move between MCP and the editor?</summary>
+          <p>Yes. Export and import the same editable JSON project in either direction.</p>
+        </details>
+        <details>
+          <summary>Does it support both app stores?</summary>
+          <p>Yes. Apple and Android phone and tablet formats are included.</p>
+        </details>
+      </section>
     </div>
   </div>
 </section>
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <a class="site-footer__brand" href="/">Truepane</a>
+    <span>© Copyright 2026 Anton Karliner</span>
+    <a href="https://github.com/antonkarliner/truepane">GitHub</a>
+  </div>
+</footer>
 <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

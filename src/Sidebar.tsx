@@ -261,6 +261,12 @@ export function Sidebar(props: SidebarProps) {
     if (p) handleBgUpdate({ color: p.color, accent: p.accent });
   };
   const randomizeSeed = () => handleBgUpdate({ seed: Math.floor(Math.random() * 1e9) });
+  const jumpTo = (id: string) => {
+    const target = document.getElementById(id);
+    const sidebar = target?.closest<HTMLElement>(".sidebar");
+    if (!target || !sidebar) return;
+    sidebar.scrollTo({ top: target.offsetTop - 51, behavior: "smooth" });
+  };
 
   // Shape-color preset swatches: harmonized to the background when auto-adjust
   // is on, otherwise a fixed palette.
@@ -293,6 +299,7 @@ export function Sidebar(props: SidebarProps) {
             className="theme-toggle"
             onClick={onToggleTheme}
             title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           >
             {theme === "dark" ? (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -312,7 +319,14 @@ export function Sidebar(props: SidebarProps) {
         <div className="brand__sub">App screenshots</div>
       </header>
 
-      <section className="panel">
+      <nav className="sidebar__nav" aria-label="Editor sections">
+        <button onClick={() => jumpTo("sidebar-setup")}>Setup</button>
+        <button onClick={() => jumpTo("sidebar-slide")}>Slide</button>
+        <button onClick={() => jumpTo("sidebar-background")}>Background</button>
+        <button onClick={() => jumpTo("sidebar-export")}>Export</button>
+      </nav>
+
+      <section className="panel" id="sidebar-setup">
         <div className="panel__title">Device</div>
         {stores.map((store) => (
           <div key={store} className="device-group">
@@ -332,7 +346,7 @@ export function Sidebar(props: SidebarProps) {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel" id="sidebar-slide">
         <div className="panel__title">
           Selected slide
           <span className="panel__count">
@@ -342,7 +356,7 @@ export function Sidebar(props: SidebarProps) {
 
         {languages.length > 0 && (
           <Field label="Editing language" hint={activeLang ? "Source text shown below each field." : undefined}>
-            <select className="text-input" value={activeLang} onChange={(e) => setActiveLang(e.target.value)}>
+            <select className="text-input" aria-label="Editing language" value={activeLang} onChange={(e) => setActiveLang(e.target.value)}>
               <option value="">Source</option>
               {languages.map((l) => (
                 <option key={l.code} value={l.code}>
@@ -363,6 +377,7 @@ export function Sidebar(props: SidebarProps) {
           <input
             className="slider"
             type="range"
+            aria-label="Title size"
             min="0.5"
             max="1.5"
             step="0.05"
@@ -385,6 +400,7 @@ export function Sidebar(props: SidebarProps) {
           <input
             className="slider"
             type="range"
+            aria-label="Subtitle size"
             min="0.5"
             max="1.5"
             step="0.05"
@@ -396,6 +412,7 @@ export function Sidebar(props: SidebarProps) {
         <Field label="Font family">
           <select
             className="text-input"
+            aria-label="Font family"
             value={state.settings.fontFamily}
             onChange={(e) => setFont(e.target.value)}
           >
@@ -523,7 +540,7 @@ export function Sidebar(props: SidebarProps) {
                 hint="Localize every slide's title + subtitle. CJK/Arabic need a matching font (e.g. a Noto family)."
               >
                 <div className="lang-add">
-                  <select className="text-input" value={pickLang} onChange={(e) => setPickLang(e.target.value)}>
+                  <select className="text-input" aria-label="Target language" value={pickLang} onChange={(e) => setPickLang(e.target.value)}>
                     <option value="">Choose a language…</option>
                     {availableLangs.map((l) => (
                       <option key={l.code} value={l.code}>
@@ -624,7 +641,7 @@ export function Sidebar(props: SidebarProps) {
         </section>
       )}
 
-      <section className="panel">
+      <section className="panel" id="sidebar-background">
         <div className="panel__title">Background</div>
 
         <label className="ai-lock">
@@ -687,6 +704,7 @@ export function Sidebar(props: SidebarProps) {
         <Field label="Fill">
           <select
             className="text-input"
+            aria-label="Background fill"
             value={bg.fill}
             onChange={(e) => handleBgUpdate({ fill: e.target.value as BackgroundFill })}
           >
@@ -703,6 +721,7 @@ export function Sidebar(props: SidebarProps) {
             <input
               className="slider"
               type="range"
+              aria-label="Gradient angle"
               min="0"
               max="360"
               step="5"
@@ -733,6 +752,7 @@ export function Sidebar(props: SidebarProps) {
         <Field label="Shape">
           <select
             className="text-input"
+            aria-label="Background shape"
             value={bg.shape}
             onChange={(e) => handleBgUpdate({ shape: e.target.value as ShapeKind })}
           >
@@ -757,6 +777,7 @@ export function Sidebar(props: SidebarProps) {
               <input
                 className="slider"
                 type="range"
+                aria-label="Rings per group"
                 min="1"
                 max="8"
                 step="1"
@@ -772,6 +793,7 @@ export function Sidebar(props: SidebarProps) {
             <input
               className="slider"
               type="range"
+              aria-label="Shape density"
               min="1"
               max="8"
               step="1"
@@ -797,6 +819,7 @@ export function Sidebar(props: SidebarProps) {
             <input
               className="slider"
               type="range"
+              aria-label="Shape opacity"
               min="0"
               max="1"
               step="0.05"
@@ -863,7 +886,7 @@ export function Sidebar(props: SidebarProps) {
         )}
       </section>
 
-      <section className="panel">
+      <section className="panel" id="sidebar-export">
         <div className="panel__title">Export</div>
         <div className="export-grid">
           <button className="primary" disabled={!!exporting} onClick={exportPng}>
