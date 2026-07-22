@@ -88,9 +88,10 @@ npm test           # vitest (pure-logic suite)
 ## Configuration
 
 The AI prompt feature is optional. Without it, the app is fully functional and the
-"Generate with AI" control is hidden. To enable it, copy `.env.example` to `.env`:
+AI controls are hidden. To enable them, copy `.env.example` to `.env` and opt in:
 
 ```
+VITE_ENABLE_AI=true
 VITE_BG_PROMPT_URL=https://YOUR-PROJECT.supabase.co/functions/v1/generator-bg-prompt
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```

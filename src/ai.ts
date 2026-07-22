@@ -12,11 +12,15 @@ import type { SlideText } from "./core/types";
 
 export type { AiProvider, AiResult } from "./core/ai";
 
-const ENDPOINTS: AiEndpoints = {
-  bgPromptUrl: import.meta.env.VITE_BG_PROMPT_URL,
-  translateUrl: import.meta.env.VITE_TRANSLATE_URL,
-  anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-};
+const AI_ENABLED = import.meta.env.VITE_ENABLE_AI === "true";
+
+const ENDPOINTS: AiEndpoints = AI_ENABLED
+  ? {
+      bgPromptUrl: import.meta.env.VITE_BG_PROMPT_URL,
+      translateUrl: import.meta.env.VITE_TRANSLATE_URL,
+      anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    }
+  : {};
 
 export const aiConfigured = Boolean(ENDPOINTS.bgPromptUrl);
 export const translateConfigured = Boolean(ENDPOINTS.translateUrl);
