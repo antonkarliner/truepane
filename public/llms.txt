@@ -1,0 +1,24 @@
+# Truepane
+
+> Truepane is a free, open-source App Store and Google Play screenshot generator. It runs in the browser, renders locally, and exports store-ready PNGs, strips, and ZIP files.
+
+Truepane supports iPhone, iPad, Android phone, and Android tablet projects, along with Google Play feature graphics and custom output sizes. Projects can include multiple platforms and locales, reusable brand kits, release baselines, and editable JSON import and export.
+
+Screenshot composition happens locally. Screenshots are not uploaded by the web editor. Optional AI helpers process only the text a user explicitly submits. Truepane is licensed under AGPL-3.0.
+
+AI agents can use the local `truepane-mcp` stdio server to create, validate, localize, and render Truepane projects without controlling the browser. The server reads screenshots from local paths and writes generated assets to local paths.
+
+## Product
+
+- [Truepane web app](https://truepane.dev/): Create and export app-store screenshot sets in the browser.
+- [Truepane documentation](https://raw.githubusercontent.com/antonkarliner/truepane/main/README.md): Complete Markdown overview of features, architecture, local setup, configuration, MCP workflow, deployment, and licensing.
+
+## Agent integration
+
+- [Truepane MCP documentation](https://raw.githubusercontent.com/antonkarliner/truepane/main/packages/truepane-mcp/README.md): Markdown setup and usage guide for the local MCP server.
+- [truepane-mcp on npm](https://www.npmjs.com/package/truepane-mcp): Published package for MCP-capable clients; run it with `npx -y truepane-mcp`.
+
+## Open source
+
+- [Truepane source repository](https://github.com/antonkarliner/truepane): Source code, issues, and contribution history.
+- [AGPL-3.0 license](https://raw.githubusercontent.com/antonkarliner/truepane/main/LICENSE): License terms for the web app and MCP server.
