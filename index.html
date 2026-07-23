@@ -65,16 +65,16 @@
         <p class="seo-content__eyebrow">For AI agents · MCP</p>
         <h2>Give your agent the complete release workflow.</h2>
         <p>
-          The open-source <a href="https://modelcontextprotocol.io">Model Context Protocol</a>
+          The open-source <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener noreferrer">Model Context Protocol</a>
           server lets Codex, Claude Code, and other compatible agents bulk-import captures,
           compose and localize sets, run preflight, manage release baselines, and render
           native or custom outputs locally.
         </p>
         <pre class="seo-content__code"><code>npx -y truepane-mcp</code></pre>
         <p class="seo-content__mcp-links">
-          <a href="https://www.npmjs.com/package/truepane-mcp">npm&nbsp;· truepane-mcp</a>
+          <a href="https://www.npmjs.com/package/truepane-mcp" target="_blank" rel="noopener noreferrer">npm&nbsp;· truepane-mcp</a>
           <span aria-hidden="true">·</span>
-          <a href="https://github.com/antonkarliner/truepane/tree/main/packages/truepane-mcp">Docs&nbsp;&amp; source</a>
+          <a href="https://github.com/antonkarliner/truepane/tree/main/packages/truepane-mcp" target="_blank" rel="noopener noreferrer">Docs&nbsp;&amp; source</a>
         </p>
       </section>
       <section class="seo-content__faq" aria-label="Truepane FAQ">
@@ -102,10 +102,32 @@
 </section>
 <footer class="site-footer">
   <div class="site-footer__inner">
-    <a class="site-footer__brand" href="/">Truepane</a>
-    <span>© Copyright 2026 Anton Karliner</span>
-    <a class="site-footer__timer" href="https://timer.coffee">From the makers of Timer.Coffee</a>
-    <a href="https://github.com/antonkarliner/truepane">GitHub</a>
+    <a class="site-footer__brand" href="/" aria-label="Truepane">
+      <span class="site-footer__logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="footer-brand-gradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#e07828" />
+              <stop offset="100%" stop-color="#8840b8" />
+            </linearGradient>
+          </defs>
+          <rect x="4" y="8" width="5.5" height="16" rx="1.6" fill="var(--brand-left-fill)" />
+          <rect x="13.25" y="6" width="5.5" height="20" rx="1.6" fill="url(#footer-brand-gradient)" />
+          <rect x="22.5" y="8" width="5.5" height="16" rx="1.6" fill="#7060a8" />
+          <circle cx="6.75" cy="10.2" r="0.75" fill="#18141c" opacity="0.45" />
+          <circle cx="16" cy="8.2" r="0.75" fill="#18141c" opacity="0.45" />
+          <circle cx="25.25" cy="10.2" r="0.75" fill="#18141c" opacity="0.45" />
+        </svg>
+      </span>
+      <span>Truepane</span>
+    </a>
+    <div class="site-footer__meta">
+      <span>© Copyright 2026 Anton Karliner</span>
+      <nav class="site-footer__links" aria-label="Footer">
+        <a class="site-footer__timer" href="https://timer.coffee" target="_blank" rel="noopener noreferrer">From the makers of Timer.Coffee</a>
+        <a href="https://github.com/antonkarliner/truepane" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </nav>
+    </div>
   </div>
 </footer>
 <script type="module" src="/src/main.tsx"></script>

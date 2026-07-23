@@ -148,7 +148,7 @@ function SetupModal({ onClose }: { onClose: () => void }) {
         <div className="setup-assurance">Runs locally. No API keys. Nothing uploaded.</div>
 
         <footer className="setup-modal__footer">
-          <a href="https://github.com/antonkarliner/truepane/tree/main/packages/truepane-mcp" target="_blank" rel="noreferrer">
+          <a href="https://github.com/antonkarliner/truepane/tree/main/packages/truepane-mcp" target="_blank" rel="noopener noreferrer">
             View full setup guide
           </a>
           <button className="primary" onClick={onClose}>Done</button>
@@ -192,7 +192,7 @@ export function Welcome({ onOpenEditor }: { onOpenEditor: () => void }) {
         <h1>Build the whole store screenshot set in one place.</h1>
         <p>Compose, localize, preflight, and export every App Store and Google Play asset—visually or with your AI agent.</p>
         <div className="welcome__open-source">
-          <a href="https://github.com/antonkarliner/truepane" target="_blank" rel="noreferrer">Free and open source</a>
+          <a href="https://github.com/antonkarliner/truepane" target="_blank" rel="noopener noreferrer">Free and open source</a>
           <span>Runs locally · no account required</span>
         </div>
         <span>Choose how to start</span>
