@@ -6,6 +6,7 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 const SEO_TITLE = "Truepane - App Store Screenshot Generator for Indie Apps";
 const SEO_DESCRIPTION =
   "Create App Store and Google Play screenshots in your browser with device frames, styled backgrounds, local canvas rendering, and PNG, strip, or ZIP export.";
+const DEFAULT_SITE_URL = "https://truepane.dev";
 
 function normalizeSiteUrl(raw: string | undefined): string | null {
   const value = raw?.trim().replace(/\/+$/, "");
@@ -125,7 +126,7 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
 
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, ".", "");
-  const siteUrl = normalizeSiteUrl(env.VITE_PUBLIC_SITE_URL);
+  const siteUrl = normalizeSiteUrl(env.VITE_PUBLIC_SITE_URL) ?? DEFAULT_SITE_URL;
   return {
     plugins: [react(), truepaneSeo(siteUrl, command === "build"), cloudflare()],
   };
