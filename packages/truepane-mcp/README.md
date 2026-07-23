@@ -13,6 +13,24 @@ written to local file paths — nothing is uploaded anywhere. **No configuration
 or API keys are needed.** The agent is itself the language model, so styling and
 translation are its own judgment calls.
 
+## What agents can do
+
+- Build one project for iPhone, iPad, Android phone, and Android tablet, with
+  target- and locale-specific screenshots.
+- Preview and apply a screenshot directory deterministically with
+  `import_screenshots`; conflicts never overwrite silently.
+- Place text and devices with normalized coordinates, resize mockups, align copy,
+  and rotate devices from −20° to +20°.
+- Span one synchronized device across two adjacent slides. Both clipped halves
+  keep their screenshot, position, scale, and rotation linked.
+- Save and apply portable brand kits without carrying screenshots or project data.
+- Render native store sizes, the 1024×500 Google Play feature graphic, or bounded
+  custom dimensions.
+- Run the same advisory release preflight as the browser editor.
+- Save a release baseline, compare added/changed/unchanged/removed assets, and
+  render only changed assets.
+- Round-trip editable project JSON with the Truepane web editor.
+
 ## Install
 
 It's a standard stdio MCP server — any MCP-capable client can launch it with
@@ -43,30 +61,41 @@ client's `mcpServers` block:
 }
 ```
 
-## Workflow the tools expect
+## Recommended agent workflow
 
-1. **`list_options`** — discover platforms (with exact store pixel sizes),
-   fonts, background fills, and shapes.
-2. **`create_project`** — slide titles/subheads plus absolute screenshot file
-   paths.
-3. **`set_style`** — colors, background, and typography (font,
-   `titleScale`/`subtitleScale`, `titleWeight`/`subtitleWeight` from 100–900),
-   chosen with the agent's own design judgment. `suggest_palette_from_screenshot`
-   extracts an accent + background tint from a screenshot with pure local math if
-   a starting point helps.
-4. **`render`** — writes full-resolution PNGs (e.g. iPhone 6.9″ = 1320×2868)
-   into an output directory you pass, and returns a small inline preview to
-   inspect. Adjust and re-render until it looks right.
-5. **`set_translations`** — the agent translates the slide texts itself and
-   stores the results per language; then `render` with `language: "all"` writes
-   per-language subfolders (`source/`, `es/`, …). A locale can also carry its
-   own screenshots (for localized app UIs) via `screenshot_path` here or
-   `set_screenshots` with a `language`; locales without one reuse the base. Each
-   language can also render in its own font (`font` here, or `set_style` with a
-   `language`) — e.g. SF for the base, `Noto Sans Arabic` for `ar`.
-6. **`export_project`** / **`load_project`** — round-trip the project JSON with
-   the Truepane web app's Import/Export Project, so a human can fine-tune the
-   agent's work (or vice versa).
+1. Call **`list_options`** first. It returns the full capability map plus valid
+   platforms, output surfaces, fonts, backgrounds, and composition presets.
+2. Use **`create_project`** for slide copy and optional screenshots. Pass
+   `targets` for a multi-platform project.
+3. Attach target/locale media with **`set_screenshots`**, or preview a prepared
+   directory with **`import_screenshots`** and explicitly apply the reviewed map.
+4. Use **`set_style`** for typography, colors, backgrounds, and composition.
+   With `slide_index`, composition is slide-specific; device position is normalized
+   canvas space, scale is `0.4..1.6`, and rotation is `−20..20`.
+   **`suggest_palette_from_screenshot`** provides a local-math starting palette.
+5. Use **`span_device_across_slides`** when one linked device should cross an
+   adjacent slide boundary.
+6. Add localized copy and optional localized screenshots with
+   **`set_translations`**. Render `language: "all"` for locale subfolders.
+7. Call **`validate_project`**, then **`render`** and inspect its inline preview.
+   Adjust and re-render until the set is ready.
+8. Use **`export_project`** / **`load_project`** for browser-editor handoff.
+
+## Tool map
+
+| Goal | Tools |
+|---|---|
+| Create and edit content | `create_project`, `set_slides`, `set_screenshots`, `set_translations` |
+| Bulk and multi-target media | `import_screenshots`, `set_screenshots` |
+| Style and composition | `set_style`, `suggest_palette_from_screenshot`, `span_device_across_slides` |
+| Reusable visual systems | `export_brand_kit`, `apply_brand_kit` |
+| Native, feature, and custom canvases | `set_output`, `render` |
+| Release safety | `validate_project`, `compare_release`, `set_release_baseline`, `render` with `changed_only` |
+| Web-editor handoff | `export_project`, `load_project` |
+
+`render` writes full-resolution PNGs and returns a compact inline preview.
+Use `target: "all"` and/or `language: "all"` for the full matrix. Use
+`what: "strip"` for a continuous horizontal strip.
 
 ## Fonts
 

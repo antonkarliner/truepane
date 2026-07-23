@@ -189,16 +189,20 @@ export function Welcome({ onOpenEditor }: { onOpenEditor: () => void }) {
 
       <div className="welcome__intro">
         <p className="welcome__eyebrow">App Store + Google Play screenshots</p>
-        <h1>Create store screenshots your way.</h1>
-        <p>Turn app captures into polished, localized screenshot sets—using your AI agent or the visual web editor.</p>
+        <h1>Build the whole store screenshot set in one place.</h1>
+        <p>Compose, localize, preflight, and export every App Store and Google Play asset—visually or with your AI agent.</p>
+        <div className="welcome__open-source">
+          <a href="https://github.com/antonkarliner/truepane" target="_blank" rel="noreferrer">Free and open source</a>
+          <span>Runs locally · no account required</span>
+        </div>
         <span>Choose how to start</span>
       </div>
 
       <div className="welcome__table">
         <section className="welcome-path welcome-path--mcp">
           <p className="welcome-path__label">Recommended</p>
-          <h2>Create with your AI agent</h2>
-          <p>Use the Truepane MCP server to let Codex, Claude Code, and other compatible agents build complete store screenshot projects locally.</p>
+          <h2>Hand the release set to your agent</h2>
+          <p>Let Codex, Claude Code, or another MCP-capable agent import captures, compose every slide, localize the set, run preflight, and render only what changed.</p>
           <div className="welcome-command">
             <span>Terminal</span>
             <code>npx -y truepane-mcp</code>
@@ -209,12 +213,16 @@ export function Welcome({ onOpenEditor }: { onOpenEditor: () => void }) {
         </section>
 
         <section className="welcome-path welcome-path--editor">
-          <h2>Create in your browser</h2>
-          <p>Design, preview, and export App Store and Google Play screenshots directly in your browser.</p>
-          <div className="welcome-preview">
+          <h2>Compose every slide visually</h2>
+          <p>Drag, resize, and rotate devices; span one mockup across two slides; reuse brand kits; and preview every target before export.</p>
+          <div
+            className="welcome-preview welcome-preview--editor-showcase"
+            role="img"
+            aria-label="Truepane editor with a rotated mobile device spanning two slides"
+          >
             <img
               src={theme === "dark" ? "/welcome-editor-preview-dark.png" : "/welcome-editor-preview.png"}
-              alt="A three-slide Timer.Coffee project open in the Truepane editor"
+              alt=""
             />
           </div>
           <button className="welcome-path__button" onClick={onOpenEditor}>

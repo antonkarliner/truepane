@@ -31,8 +31,31 @@ tool small, sharp, and cheap to run.
   model returns a style + palette. Bring your own Groq key, or use the hosted endpoint.
 - **Typography**: curated Google Fonts (incl. Apple/Android system fonts and Noto
   multi-script + CJK) plus custom `.ttf/.otf/.woff(2)` upload.
+- **Flexible composition**: choose a preset or place text and devices directly,
+  resize them, rotate devices from −20° to +20°, and drag or nudge mockups on canvas.
+- **Cross-slide devices**: span one synchronized device across two adjacent slides.
+  Both clipped halves share their screenshot, position, scale, and rotation.
 - **Export**: per-slide PNG, one horizontal strip PNG, or a ZIP of everything. Plus JSON
   project import/export. State auto-saves to `localStorage`.
+- **Multi-platform projects**: keep separate iPhone, iPad, Android phone, and Android
+  tablet captures on the same ordered slides. Locale screenshots fall back only to
+  their own target's source capture; they never borrow another platform's image.
+- **Preview-first bulk import**: choose a folder or ZIP, review deterministic
+  target/locale/slide mappings, correct rows, then apply once. Explicit
+  `target/locale/NN-name.png` paths take priority; conflicts never overwrite silently.
+- **Shared release preflight**: the editor and MCP report the same stable issue
+  codes for missing captures/translations, locale fallbacks, crop risk, composition,
+  fonts, and fill/text contrast. Warnings are advisory and require “export anyway”
+  in the web editor.
+- **Local brand kits**: save typography, text colors, background, custom font, and
+  default composition for reuse. Kits are portable `.truepane-brand.json` files and
+  never contain slides, screenshots, targets, translations, credentials, or history.
+- **Flexible output surfaces**: keep the four native store screenshot sizes, render a
+  Google Play feature graphic at exactly 1024×500, or choose bounded custom dimensions.
+  The procedural device is scaled and placed as a layer; captures are never stretched.
+- **Release update mode**: explicitly save deterministic release signatures, compare
+  added/changed/unchanged/removed assets later, and export a changed-only ZIP with a
+  manifest. Baselines contain hashes, not rendered PNGs, and never update implicitly.
 
 ## Design decisions (the interesting part)
 
@@ -41,8 +64,8 @@ Each of these was a deliberate fork, chosen for a reason:
 - **Procedural frames, not image mockups.** The target is *flat store-submission*
   screenshots at exact required resolutions — which procedural drawing nails: crisp at
   any scale, no asset pipeline, and **no licensing exposure** (most "free" device-mockup
-  packs are not actually clean for commercial redistribution). The trade-off we accept:
-  no angled/perspective marketing shots.
+  packs are not actually clean for commercial redistribution). Flat 2D rotation is
+  supported; perspective and photographic mockups remain out of scope.
 - **Parametric backgrounds, not diffusion images.** Backgrounds are seeded procedural
   shapes that reproduce exactly and stay tasteful. A raster image model would be
   unpredictable, costly per call, hard to keep consistent across a set, and would force a
@@ -166,17 +189,27 @@ from a repo checkout instead (for development), point the client's command at
 
 ### Workflow the tools expect
 
-1. `list_options` — discover platforms (with exact store pixel sizes), fonts, fills,
-   shapes.
-2. `create_project` — slide titles/subheads + absolute screenshot file paths.
+1. `list_options` — start here to discover the full workflow, platforms (with exact
+   store pixel sizes), output surfaces, fonts, fills, shapes, and composition presets.
+2. `create_project` — slide titles/subheads + absolute screenshot file paths. Pass
+   `targets` to start a multi-platform project.
 3. `set_style` — colors, background, typography (font, `titleScale`/`subtitleScale`,
    and `titleWeight`/`subtitleWeight` from 100–900), chosen with the agent's own
    design judgment (`suggest_palette_from_screenshot` extracts an accent + background
-   tint from a screenshot with pure local math if a starting point helps).
-4. `render` — writes full-resolution PNGs (e.g. iPhone 6.9″ = 1320×2868) into an
+   tint from a screenshot with pure local math if a starting point helps). Its
+   `composition` patch controls normalized text/device position, size, alignment,
+   and flat rotation. Use `slide_index` for a slide-specific composition.
+4. `set_screenshots` — attach each capture with its `target` and optional `language`.
+   A missing target stays visibly empty; Truepane never stretches a capture from a
+   different platform into it.
+   For a prepared directory, `import_screenshots` returns a dry-run mapping by default;
+   repeat with `apply: true, dry_run: false` to apply only non-conflicting files.
+5. `render` — writes full-resolution PNGs (e.g. iPhone 6.9″ = 1320×2868) into an
    output dir you pass, and returns a small inline preview to inspect. Adjust and
-   re-render until it looks right.
-5. `set_translations` — the agent translates the slide texts itself and stores the
+   re-render until it looks right. Pass `target: "all"` for one folder per target.
+   `render` summarizes advisory preflight warnings; call `validate_project` for the
+   complete ordered target/locale/slide matrix.
+6. `set_translations` — the agent translates the slide texts itself and stores the
    results per language; then `render` with `language: "all"` writes per-language
    subfolders (`source/`, `es/`, …), matching the web app's all-languages ZIP. A
    locale can also carry its **own screenshots** (for apps whose UI is itself
@@ -185,9 +218,26 @@ from a repo checkout instead (for development), point the client's command at
    language can render in its **own font** too (`font` here, or `set_style` with a
    `language`) — e.g. San Francisco for the base and `Noto Sans Arabic` for `ar` —
    since the server has no per-glyph fallback for scripts a font doesn't cover.
-6. `export_project` / `load_project` — round-trip the project JSON with the web
+7. `export_project` / `load_project` — round-trip v2 project JSON with the web
    app's Import/Export Project, so a human can fine-tune the agent's work (or vice
    versa).
+
+Use `span_device_across_slides` to place one device across an adjacent slide pair.
+The two clipped halves keep their screenshot, position, scale, and rotation linked,
+including after project export/import and later screenshot or copy updates.
+
+`export_brand_kit` and `apply_brand_kit` move the current visual defaults between
+projects without carrying project content. Applying preserves per-slide overrides
+unless `clear_slide_overrides: true` is explicitly supplied.
+
+Use `set_output` to persist a native, `play-feature`, or `custom` output on an MCP
+project. `render` also accepts temporary `output_id`, `output_width`,
+`output_height`, and `output_frame` overrides.
+
+Use `compare_release`, `set_release_baseline`, and `render changed_only:true` for
+release updates through MCP. Any future pixel-affecting renderer change must bump
+`RENDERER_SCHEMA_VERSION` in `src/core/release.ts`, intentionally marking every
+asset changed.
 
 Google Fonts are fetched on demand and cached in `~/.cache/truepane/fonts` (Inter is
 bundled, so offline rendering works out of the box). The `-apple-system` font renders

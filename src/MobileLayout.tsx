@@ -1,11 +1,16 @@
 // Mobile layout for Truepane — preview-first workflow with bottom sheet tabs.
 import { useEffect, useRef, useState } from "react";
-import { ColorRow, Field, ImageDrop, LayoutSlider, Segmented, SlidePreview, TextInput } from "./components";
-import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimFor } from "./core/render";
+import { ColorRow, CompositionControls, Field, ImageDrop, LayoutSlider, Segmented, SlidePreview, TextInput } from "./components";
+import { BrandKitControls } from "./BrandKitControls";
+import { ReleaseUpdateControls } from "./ReleaseUpdateControls";
+import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimForSettings } from "./core/render";
+import { BUILTIN_OUTPUTS, normalizeOutput } from "./core/output";
 import { accentSuggestions, extractPalette } from "./palette";
 import { aiConfigured, generateBackground, type AiProvider } from "./ai";
 import { BG_PRESETS, FONT_OPTIONS } from "./core/constants";
-import type { AppState, Background, BackgroundFill, ShapeKind, Settings, Slide, StoreId } from "./core/types";
+import { getImageAsset, setImageAsset } from "./core/media";
+import type { AppState, Background, BackgroundFill, Composition, ReleaseAssetComparison, ShapeKind, Settings, Slide, StoreId } from "./core/types";
+import type { BrandKit } from "./core/brand-kit";
 
 const DEFAULT_SHAPE_PRESETS = ["#c47c3b", "#1a1612", "#5b6647", "#c4523b", "#5b6cff", "#8a6f4f"];
 const STORE_LABELS: Record<StoreId, string> = { appstore: "App Store", playstore: "Google Play" };
@@ -37,6 +42,22 @@ export interface MobileLayoutProps {
   onToggleTheme: () => void;
   eyedropTarget: ((hex: string) => void) | null;
   pickColorFromSlide: (hex: string) => void;
+  arranging: boolean;
+  onToggleArrange: () => void;
+  onSpanDevice: () => void;
+  onBulkFiles: (files: File[]) => void;
+  onRunPreflight: () => void;
+  brandKits: BrandKit[];
+  onCreateBrandKit: (name: string) => void;
+  onRenameBrandKit: (id: string, name: string) => void;
+  onApplyBrandKit: (kit: BrandKit, clearOverrides: boolean) => void;
+  onDeleteBrandKit: (id: string) => void;
+  onImportBrandKit: (kit: BrandKit) => void;
+  releaseRows: ReleaseAssetComparison[];
+  releaseBusy: boolean;
+  onCompareRelease: () => void;
+  onExportChanged: () => void;
+  onSetReleaseBaseline: () => void;
 }
 
 export function MobileLayout(props: MobileLayoutProps) {
@@ -48,6 +69,21 @@ export function MobileLayout(props: MobileLayoutProps) {
     exportPng, exportStrip, exportZip, exportJson, importJson, exporting,
     requestEyedrop, theme, onToggleTheme,
     eyedropTarget, pickColorFromSlide,
+    arranging, onToggleArrange,
+    onSpanDevice,
+    onBulkFiles,
+    onRunPreflight,
+    brandKits,
+    onCreateBrandKit,
+    onRenameBrandKit,
+    onApplyBrandKit,
+    onDeleteBrandKit,
+    onImportBrandKit,
+    releaseRows,
+    releaseBusy,
+    onCompareRelease,
+    onExportChanged,
+    onSetReleaseBaseline,
   } = props;
 
   const [activeTab, setActiveTab] = useState<MobileTab>("content");
@@ -58,6 +94,8 @@ export function MobileLayout(props: MobileLayoutProps) {
 
   const fontFileRef = useRef<HTMLInputElement>(null);
   const jsonFileRef = useRef<HTMLInputElement>(null);
+  const bulkDirectoryRef = useRef<HTMLInputElement>(null);
+  const bulkZipRef = useRef<HTMLInputElement>(null);
   const touchStartX = useRef(0);
 
   // AI state — mirrors Sidebar
@@ -99,8 +137,36 @@ export function MobileLayout(props: MobileLayoutProps) {
 
   const totalSlides = state.slides.length;
   const platform = state.settings.platform || "ios";
+  const activeAsset = getImageAsset(selected, platform);
+  const previewSlide = { ...selected, image: activeAsset.image ?? null, imageDataUrl: activeAsset.imageDataUrl };
+  const selectPlatform = (value: string) =>
+    updateSettings({
+      platform: value,
+      targets: Array.from(new Set([...(state.settings.targets ?? []), value])),
+      output: state.settings.output && state.settings.output.kind !== "native"
+        ? { ...state.settings.output, frame: value }
+        : undefined,
+    });
   const stores: StoreId[] = ["appstore", "playstore"];
-  const dim = dimFor(platform);
+  const dim = dimForSettings(state.settings);
+  const outputId = state.settings.output?.id ?? platform;
+  const selectOutput = (id: string) => {
+    const builtin = BUILTIN_OUTPUTS.find((output) => output.id === id);
+    if (builtin?.kind === "native") updateSettings({ platform: builtin.frame, output: undefined });
+    else if (builtin) updateSettings({
+      platform: builtin.frame,
+      targets: Array.from(new Set([...(state.settings.targets ?? []), builtin.frame])),
+      output: { ...builtin },
+    });
+    else updateSettings({ output: normalizeOutput({
+      id: "custom",
+      label: "Custom output",
+      width: dim.W,
+      height: dim.H,
+      store: "playstore",
+      frame: platform,
+    }, platform) });
+  };
 
   // Scale slide to fit within available width AND height — whichever is tighter.
   // dim.W/dim.H is the slide aspect ratio (portrait ≈ 0.46 for iPhone).
@@ -129,6 +195,15 @@ export function MobileLayout(props: MobileLayoutProps) {
       updateSlide({ background: { ...state.settings.background } });
     }
   };
+  const hasCompositionOverride = !!selected.composition;
+  const composition = selected.composition ?? state.settings.composition;
+  const updateComposition = (next: Composition) => {
+    updateSlide({ composition: next });
+  };
+  const toggleCompositionOverride = () => {
+    if (hasCompositionOverride) updateSlide({ composition: undefined });
+    else updateSlide({ composition: { ...(state.settings.composition ?? { preset: "classic" }) } });
+  };
 
   const shapeMeta = SHAPE_FAMILIES.find((f) => f.id === bg.shape);
   const isGradient = bg.fill !== "solid";
@@ -137,8 +212,8 @@ export function MobileLayout(props: MobileLayoutProps) {
   const shapePresets = autoAccent ? accentSuggestions(bg.color) : DEFAULT_SHAPE_PRESETS;
 
   const matchPalette = () => {
-    if (!selected.image) return;
-    const p = extractPalette(selected.image);
+    if (!activeAsset.image) return;
+    const p = extractPalette(activeAsset.image);
     if (p) handleBgUpdate({ color: p.color, accent: p.accent });
   };
   const randomizeSeed = () => handleBgUpdate({ seed: Math.floor(Math.random() * 1e9) });
@@ -237,22 +312,24 @@ export function MobileLayout(props: MobileLayoutProps) {
         <div
           ref={innerRef}
           className="mobile-preview__inner"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
+          onTouchStart={arranging ? undefined : handleTouchStart}
+          onTouchEnd={arranging ? undefined : handleTouchEnd}
           onClick={fullPreview && !eyedropTarget ? () => setFullPreview(false) : undefined}
           style={{ pointerEvents: eyedropTarget && !fullPreview ? "none" : undefined }}
         >
           <SlidePreview
-            slide={selected}
+            slide={previewSlide}
             settings={state.settings}
             slideIndex={selectedIndex}
             totalSlides={totalSlides}
             displayWidth={displayWidth}
-            selected={false}
+            selected={arranging}
             onSelect={() => {}}
             onDelete={null}
             eyedropping={!!eyedropTarget}
             onPickColor={pickColorFromSlide}
+            arranging={arranging}
+            onCompositionChange={(next) => updateSlide({ composition: next })}
           />
         </div>
 
@@ -349,19 +426,65 @@ export function MobileLayout(props: MobileLayoutProps) {
                       <div className="muted small device-group__label">{STORE_LABELS[store]}</div>
                       <Segmented
                         value={PLATFORMS.some((p) => p.id === platform && p.store === store) ? platform : ""}
-                        onChange={(v) => updateSettings({ platform: v })}
+                        onChange={selectPlatform}
                         options={PLATFORMS.filter((p) => p.store === store).map((p) => ({ value: p.id, label: p.label }))}
                       />
                     </div>
                   ))}
+                  <Field label="Output">
+                    <select className="text-input" aria-label="Output format" value={outputId} onChange={(event) => selectOutput(event.target.value)}>
+                      {BUILTIN_OUTPUTS.map((output) => <option key={output.id} value={output.id}>{output.label}</option>)}
+                      <option value="custom">Custom size</option>
+                    </select>
+                  </Field>
+                  {state.settings.output?.kind === "custom" && (
+                    <div className="output-size-grid">
+                      <input aria-label="Custom output width" className="text-input" type="number" min="320" max="8192"
+                        value={state.settings.output.width}
+                        onChange={(event) => updateSettings({ output: normalizeOutput({ ...state.settings.output, width: Number(event.target.value) }, platform) })} />
+                      <input aria-label="Custom output height" className="text-input" type="number" min="320" max="8192"
+                        value={state.settings.output.height}
+                        onChange={(event) => updateSettings({ output: normalizeOutput({ ...state.settings.output, height: Number(event.target.value) }, platform) })} />
+                    </div>
+                  )}
                 </div>
 
-                <Field label="Screenshot">
+                <Field label={`Screenshot · ${PLATFORMS.find((p) => p.id === platform)?.label ?? platform}`}>
                   <ImageDrop
-                    image={selected.imageDataUrl ? { dataUrl: selected.imageDataUrl } : null}
-                    onImage={(img, dataUrl) => updateSlide({ image: img, imageDataUrl: dataUrl })}
-                    onClear={() => updateSlide({ image: null, imageDataUrl: null })}
+                    image={activeAsset.imageDataUrl ? { dataUrl: activeAsset.imageDataUrl } : null}
+                    onImage={(img, dataUrl) => updateSlide({
+                      media: setImageAsset(selected, platform, "", { image: img, imageDataUrl: dataUrl }).media,
+                    })}
+                    onClear={() => updateSlide({
+                      media: setImageAsset(selected, platform, "", { image: null, imageDataUrl: null }).media,
+                    })}
                   />
+                  <div className="bulk-import-actions">
+                    <button className="ghost small" onClick={() => bulkDirectoryRef.current?.click()}>Import folder</button>
+                    <button className="ghost small" onClick={() => bulkZipRef.current?.click()}>Import ZIP</button>
+                    <input
+                      ref={bulkDirectoryRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      multiple
+                      style={{ display: "none" }}
+                      {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+                      onChange={(event) => {
+                        onBulkFiles(Array.from(event.target.files ?? []));
+                        event.target.value = "";
+                      }}
+                    />
+                    <input
+                      ref={bulkZipRef}
+                      type="file"
+                      accept=".zip,application/zip"
+                      style={{ display: "none" }}
+                      onChange={(event) => {
+                        onBulkFiles(Array.from(event.target.files ?? []));
+                        event.target.value = "";
+                      }}
+                    />
+                  </div>
                 </Field>
 
                 <Field label="Title">
@@ -400,6 +523,28 @@ export function MobileLayout(props: MobileLayoutProps) {
             {/* ── Style tab ── */}
             {activeTab === "style" && (
               <>
+                <Field label="Brand kits">
+                  <BrandKitControls
+                    kits={brandKits}
+                    onCreate={onCreateBrandKit}
+                    onRename={onRenameBrandKit}
+                    onApply={onApplyBrandKit}
+                    onDelete={onDeleteBrandKit}
+                    onImport={onImportBrandKit}
+                  />
+                </Field>
+                <CompositionControls
+                  platform={platform}
+                  output={state.settings.output}
+                  composition={composition}
+                  hasOverride={hasCompositionOverride}
+                  arranging={arranging}
+                  onChange={updateComposition}
+                  onToggleOverride={toggleCompositionOverride}
+                  onToggleArrange={onToggleArrange}
+                  onSpanDevice={onSpanDevice}
+                  canSpanDevice={selectedIndex < totalSlides - 1}
+                />
                 <Field label={`Title size · ${Math.round((state.settings.titleScale ?? 1) * 100)}%`}>
                   <input
                     className="slider" type="range" min="0.5" max="1.5" step="0.05"
@@ -631,7 +776,7 @@ export function MobileLayout(props: MobileLayoutProps) {
                   </>
                 )}
 
-                <button className="ghost small upload-btn match-btn" disabled={!selected.image} onClick={matchPalette}>
+                <button className="ghost small upload-btn match-btn" disabled={!activeAsset.image} onClick={matchPalette}>
                   Match screenshot palette
                 </button>
 
@@ -661,6 +806,17 @@ export function MobileLayout(props: MobileLayoutProps) {
             {/* ── Export tab ── */}
             {activeTab === "export" && (
               <>
+                <Field label="Release update mode">
+                  <ReleaseUpdateControls
+                    rows={releaseRows}
+                    baselineDate={state.releaseBaseline?.createdAt}
+                    busy={releaseBusy}
+                    onCompare={onCompareRelease}
+                    onExportChanged={onExportChanged}
+                    onSetBaseline={onSetReleaseBaseline}
+                  />
+                </Field>
+                <button className="ghost preflight-button" onClick={onRunPreflight}>Run release preflight</button>
                 <div className="export-grid" style={{ marginBottom: 14 }}>
                   <button className="primary" disabled={!!exporting} onClick={exportPng}>
                     {exporting === "png" ? "…" : "Download this slide (PNG)"}

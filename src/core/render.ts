@@ -31,6 +31,9 @@ import type {
   ShapeFamily,
   Slide,
 } from "./types";
+import type { OutputSpec } from "./types";
+import { outputForSettings } from "./output";
+import { resolveComposition } from "./composition";
 
 // ---------------------------------------------------------------------
 // Canvas factory — where every canvas this module draws on comes from.
@@ -308,14 +311,15 @@ function roundRect(
 // with destination-out (antialiased).
 // ---------------------------------------------------------------------
 function paintFrameChrome(ctx: CanvasRenderingContext2D, F: Frame): void {
+  const unit = F.geometryScale ?? F.W / getFrame(F.id).W;
   const c = createCanvas(F.W, F.H);
   const fx = get2d(c);
 
   // 1) Soft drop shadow under the body
   fx.save();
   fx.shadowColor = "rgba(0,0,0,0.22)";
-  fx.shadowBlur = 40;
-  fx.shadowOffsetY = 18;
+  fx.shadowBlur = 40 * unit;
+  fx.shadowOffsetY = 18 * unit;
   fx.fillStyle = "#0a0a0c";
   roundRect(fx, F.BODY.x, F.BODY.y, F.BODY.w, F.BODY.h, F.BODY.r);
   fx.fill();
@@ -328,11 +332,11 @@ function paintFrameChrome(ctx: CanvasRenderingContext2D, F: Frame): void {
 
   // 3) Side buttons — flush nubs, a hair lighter than the body so they
   //    read as physical without shouting.
-  const BTN_W = 6;
+  const BTN_W = 6 * unit;
   fx.fillStyle = F.COLORS.button;
   for (const b of F.SIDE_BUTTONS) {
     const bx = b.side === "left" ? F.BODY.x - BTN_W : F.BODY.x + F.BODY.w;
-    roundRect(fx, bx, b.y, BTN_W, b.h, 2);
+    roundRect(fx, bx, b.y, BTN_W, b.h, 2 * unit);
     fx.fill();
   }
 
@@ -352,7 +356,7 @@ function paintFrameChrome(ctx: CanvasRenderingContext2D, F: Frame): void {
   //    without reading as "shiny metal".
   fx.save();
   fx.globalCompositeOperation = "source-atop";
-  fx.lineWidth = 2;
+  fx.lineWidth = 2 * unit;
   fx.strokeStyle = F.COLORS.edgeHi;
   roundRect(fx, F.BODY.x + 1, F.BODY.y + 1, F.BODY.w - 2, F.BODY.h - 2, F.BODY.r - 1);
   fx.stroke();
@@ -1016,8 +1020,11 @@ function paintText(
   F: Frame,
 ): void {
   const T = F.TEXT;
-  const maxW = F.W - T.leftPad - T.rightPad;
+  const composition = resolveComposition(slide.composition ?? settings.composition, F);
+  const placement = composition.text;
+  const maxW = placement.width * F.W;
   const font = familyToCss(settings.fontFamily || "Inter");
+  const unit = F.geometryScale !== undefined ? 1 : F.W / getFrame(F.id).W;
   ctx.textBaseline = "top";
 
   const title = slide.title || "";
@@ -1027,11 +1034,20 @@ function paintText(
   ctx.fillStyle = slide.titleColor ?? (settings.titleColor || "#1a1612");
   ctx.font = `${titleWeight} ${Math.round(T.titleFontSize * titleScale)}px ${font}`;
   applyWeightAxis(ctx, titleWeight);
-  ctx.textAlign = titleRtl ? "right" : "left";
+  const titleAlign =
+    titleRtl && placement.align === "left"
+      ? "right"
+      : !titleRtl && placement.align === "right"
+        ? "right"
+        : placement.align;
+  ctx.textAlign = titleAlign;
   ctx.direction = titleRtl ? "rtl" : "ltr";
-  const titleX = titleRtl ? F.W - T.rightPad : T.leftPad;
+  const left = placement.x * F.W;
+  const alignedX = (align: "left" | "center" | "right") =>
+    align === "right" ? left + maxW : align === "center" ? left + maxW / 2 : left;
+  const titleX = alignedX(titleAlign);
   const titleLines = wrapText(ctx, title, maxW);
-  let y = T.titleTop;
+  let y = placement.y * F.H;
   for (const line of titleLines) {
     ctx.fillText(line, titleX, y);
     y += Math.round(T.titleLineHeight * titleScale);
@@ -1045,11 +1061,18 @@ function paintText(
     ctx.fillStyle = slide.subheadColor ?? (settings.subheadColor || "rgba(26,22,18,0.62)");
     ctx.font = `${subheadWeight} ${Math.round(T.subheadFontSize * scale)}px ${font}`;
     applyWeightAxis(ctx, subheadWeight);
-    ctx.textAlign = subRtl ? "right" : "left";
+    const subAlign =
+      subRtl && placement.align === "left"
+        ? "right"
+        : !subRtl && placement.align === "right"
+          ? "right"
+          : placement.align;
+    ctx.textAlign = subAlign;
     ctx.direction = subRtl ? "rtl" : "ltr";
-    const subX = subRtl ? F.W - T.rightPad : T.leftPad;
+    const subX = alignedX(subAlign);
     const subLines = wrapText(ctx, slide.subhead, maxW);
-    let sy = Math.max(T.subheadTop, titleBottom + 30);
+    const presetSubheadTop = placement.y * F.H + (T.subheadTop - T.titleTop);
+    let sy = Math.max(presetSubheadTop, titleBottom + 30 * unit);
     for (const line of subLines) {
       ctx.fillText(line, subX, sy);
       sy += Math.round(T.subheadLineHeight * scale);
@@ -1128,6 +1151,148 @@ function paintFrameOverlay(ctx: CanvasRenderingContext2D, F: Frame): void {
   paintCamera(ctx, F);
 }
 
+function paintDevice(
+  ctx: CanvasRenderingContext2D,
+  slide: Slide,
+  settings: Settings,
+  F: Frame,
+): void {
+  const layer = createCanvas(F.W, F.H);
+  const lx = get2d(layer);
+  paintScreenshot(lx, slide.image, F);
+  paintFrameOverlay(lx, F);
+
+  const { device } = resolveComposition(slide.composition ?? settings.composition, F);
+  const baseCx = F.BODY.x + F.BODY.w / 2;
+  const baseCy = F.BODY.y + F.BODY.h / 2;
+  ctx.save();
+  ctx.translate(device.x * F.W, device.y * F.H);
+  ctx.rotate((device.rotation * Math.PI) / 180);
+  ctx.scale(device.scale, device.scale);
+  ctx.translate(-baseCx, -baseCy);
+  ctx.drawImage(toDrawable(layer), 0, 0);
+  ctx.restore();
+}
+
+function scaleFrame(frame: Frame, scale: number): Frame {
+  if (scale === 1) return frame;
+  const rect = (r: RoundRect): RoundRect => ({
+    x: r.x * scale,
+    y: r.y * scale,
+    w: r.w * scale,
+    h: r.h * scale,
+    r: r.r * scale,
+  });
+  const camera =
+    frame.CAMERA.kind === "island"
+      ? {
+          kind: "island" as const,
+          x: frame.CAMERA.x * scale,
+          y: frame.CAMERA.y * scale,
+          w: frame.CAMERA.w * scale,
+          h: frame.CAMERA.h * scale,
+        }
+      : {
+          kind: "hole" as const,
+          cx: frame.CAMERA.cx * scale,
+          cy: frame.CAMERA.cy * scale,
+          r: frame.CAMERA.r * scale,
+        };
+  return {
+    ...frame,
+    geometryScale: (frame.geometryScale ?? 1) * scale,
+    W: Math.max(1, Math.round(frame.W * scale)),
+    H: Math.max(1, Math.round(frame.H * scale)),
+    BODY: rect(frame.BODY),
+    BEZEL: rect(frame.BEZEL),
+    SCREEN: rect(frame.SCREEN),
+    CAMERA: camera,
+    SIDE_BUTTONS: frame.SIDE_BUTTONS.map((b) => ({ ...b, y: b.y * scale, h: b.h * scale })),
+    TEXT: {
+      ...frame.TEXT,
+      leftPad: frame.TEXT.leftPad * scale,
+      rightPad: frame.TEXT.rightPad * scale,
+      titleTop: frame.TEXT.titleTop * scale,
+      titleFontSize: frame.TEXT.titleFontSize * scale,
+      titleLineHeight: frame.TEXT.titleLineHeight * scale,
+      subheadTop: frame.TEXT.subheadTop * scale,
+      subheadFontSize: frame.TEXT.subheadFontSize * scale,
+      subheadLineHeight: frame.TEXT.subheadLineHeight * scale,
+      titleToSubheadGap: frame.TEXT.titleToSubheadGap * scale,
+    },
+  };
+}
+
+function adaptFrameToOutput(base: Frame, output: OutputSpec): Frame {
+  if (output.width === base.W && output.height === base.H && output.kind === "native") return base;
+  const landscape = output.width > output.height;
+  const maxDeviceW = output.width * (landscape ? 0.43 : 0.68);
+  const maxDeviceH = output.height * (landscape ? 0.84 : 0.74);
+  const geometryScale = Math.min(maxDeviceW / base.BODY.w, maxDeviceH / base.BODY.h);
+  const baseCx = base.BODY.x + base.BODY.w / 2;
+  const baseCy = base.BODY.y + base.BODY.h / 2;
+  const centerX = output.width / 2;
+  const centerY = output.height / 2;
+  const rect = (value: RoundRect): RoundRect => ({
+    x: centerX + (value.x - baseCx) * geometryScale,
+    y: centerY + (value.y - baseCy) * geometryScale,
+    w: value.w * geometryScale,
+    h: value.h * geometryScale,
+    r: value.r * geometryScale,
+  });
+  const camera = base.CAMERA.kind === "island"
+    ? {
+        kind: "island" as const,
+        x: centerX + (base.CAMERA.x - baseCx) * geometryScale,
+        y: centerY + (base.CAMERA.y - baseCy) * geometryScale,
+        w: base.CAMERA.w * geometryScale,
+        h: base.CAMERA.h * geometryScale,
+      }
+    : {
+        kind: "hole" as const,
+        cx: centerX + (base.CAMERA.cx - baseCx) * geometryScale,
+        cy: centerY + (base.CAMERA.cy - baseCy) * geometryScale,
+        r: base.CAMERA.r * geometryScale,
+      };
+  return {
+    ...base,
+    store: output.store,
+    storeLabel: output.store === "playstore" ? "Google Play" : "App Store",
+    label: output.label,
+    W: output.width,
+    H: output.height,
+    BODY: rect(base.BODY),
+    BEZEL: rect(base.BEZEL),
+    SCREEN: rect(base.SCREEN),
+    CAMERA: camera,
+    SIDE_BUTTONS: base.SIDE_BUTTONS.map((button) => ({
+      ...button,
+      y: centerY + (button.y - baseCy) * geometryScale,
+      h: button.h * geometryScale,
+    })),
+    TEXT: {
+      ...base.TEXT,
+      leftPad: output.width * 0.06,
+      rightPad: output.width * 0.06,
+      titleTop: output.height * (landscape ? 0.18 : 0.08),
+      titleFontSize: output.height * (landscape ? 0.105 : 0.045),
+      titleLineHeight: output.height * (landscape ? 0.11 : 0.05),
+      subheadTop: output.height * (landscape ? 0.46 : 0.18),
+      subheadFontSize: output.height * (landscape ? 0.045 : 0.025),
+      subheadLineHeight: output.height * (landscape ? 0.055 : 0.032),
+      titleToSubheadGap: output.height * 0.035,
+    },
+    geometryScale,
+  };
+}
+
+export function getRenderFrame(platform: string, output?: OutputSpec, renderScale = 1): Frame {
+  const settings = { platform, output } as Settings;
+  const spec = outputForSettings(settings);
+  const adapted = adaptFrameToOutput(getFrame(spec.frame), spec);
+  return scaleFrame(adapted, Math.max(0.02, Math.min(1, renderScale)));
+}
+
 // ---------------------------------------------------------------------
 // Main entry — slide & strip
 // ---------------------------------------------------------------------
@@ -1137,8 +1302,9 @@ export async function paintSlide(
   settings: Settings,
   slideIndex: number,
   totalSlides: number,
+  renderScale = 1,
 ): Promise<void> {
-  const F = getFrame(settings.platform || "ios");
+  const F = getRenderFrame(settings.platform || "ios", settings.output, renderScale);
   canvas.width = F.W;
   canvas.height = F.H;
   const ctx = get2d(canvas);
@@ -1146,8 +1312,7 @@ export async function paintSlide(
 
   paintBackground(ctx, slide.background ?? settings.background, slideIndex, totalSlides, F);
   paintText(ctx, slide, settings, F);
-  paintScreenshot(ctx, slide.image, F);
-  paintFrameOverlay(ctx, F);
+  paintDevice(ctx, slide, settings, F);
 }
 
 export async function paintStrip(
@@ -1155,7 +1320,7 @@ export async function paintStrip(
   slides: Slide[],
   settings: Settings,
 ): Promise<void> {
-  const F = getFrame(settings.platform || "ios");
+  const F = getRenderFrame(settings.platform || "ios", settings.output);
   const N = slides.length;
   canvas.width = F.W * N;
   canvas.height = F.H;
@@ -1173,6 +1338,16 @@ export async function paintStrip(
 export function dimFor(platform: string): PlatformDim {
   const F = getFrame(platform);
   return { W: F.W, H: F.H, storeLabel: F.storeLabel, label: F.label };
+}
+
+export function dimForSettings(settings: Settings): PlatformDim {
+  const output = outputForSettings(settings);
+  return {
+    W: output.width,
+    H: output.height,
+    storeLabel: output.store === "playstore" ? "Google Play" : "App Store",
+    label: output.label,
+  };
 }
 
 // Picker order: App Store frames first, then Play Store.

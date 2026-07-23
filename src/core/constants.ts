@@ -85,6 +85,7 @@ export function defaultState(): AppState {
     slides: DEFAULT_SLIDES.map((s) => ({ ...s, image: null, imageDataUrl: null })),
     settings: {
       platform: "ios",
+      targets: ["ios"],
       fontFamily: "Inter",
       customFont: null,
       titleColor: "#1a1612",
@@ -93,6 +94,7 @@ export function defaultState(): AppState {
       subheadColor: "rgba(26,22,18,0.62)",
       subtitleScale: 1,
       subtitleWeight: 400,
+      composition: { preset: "classic" },
       background: {
         fill: "solid",
         shape: "none",

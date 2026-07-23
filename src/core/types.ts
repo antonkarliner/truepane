@@ -87,6 +87,8 @@ export interface Frame {
   SIDE_BUTTONS: SideButton[];
   COLORS: FrameColors;
   TEXT: FrameText;
+  /** Geometry scale relative to the native frame, for non-native output surfaces. */
+  geometryScale?: number;
 }
 
 // Background = a fill layer (solid or gradient) with an optional shape overlay
@@ -137,6 +139,32 @@ export interface CustomFont {
   dataUrl: string;
 }
 
+export type CompositionPreset = "classic" | "hero" | "tilt-left" | "tilt-right" | "editorial";
+export type TextAlign = "left" | "center" | "right";
+
+export interface TextPlacement {
+  /** Normalized canvas coordinates (0..1; controlled bleed may exceed this). */
+  x: number;
+  y: number;
+  width: number;
+  align: TextAlign;
+}
+
+export interface DevicePlacement {
+  /** Device BODY center in normalized canvas coordinates. */
+  x: number;
+  y: number;
+  scale: number;
+  /** Flat 2D rotation in degrees. */
+  rotation: number;
+}
+
+export interface Composition {
+  preset: CompositionPreset;
+  text?: Partial<TextPlacement>;
+  device?: Partial<DevicePlacement>;
+}
+
 // A title/subhead pair, optionally with its own localized screenshot. The base
 // text/image live on the slide directly; per-language overrides are stored as a
 // map of these keyed by language code. `imageDataUrl` is the serialized locale
@@ -145,8 +173,21 @@ export interface CustomFont {
 export interface SlideText {
   title: string;
   subhead: string;
+  /** @deprecated Legacy v1 locale media, migrated into Slide.media. */
   imageDataUrl?: string | null;
   image?: ImageSourceLike | null;
+}
+
+export interface ImageAsset {
+  imageDataUrl: string | null;
+  image?: ImageSourceLike | null;
+  width?: number;
+  height?: number;
+}
+
+export interface TargetMedia {
+  source?: ImageAsset;
+  locales?: Record<string, ImageAsset>;
 }
 
 // A target language for AI translation. `code` is used for ZIP folder names and
@@ -160,8 +201,24 @@ export interface LanguageTarget {
   font?: string;
 }
 
+export type OutputKind = "native" | "feature" | "custom";
+
+export interface OutputSpec {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  store: StoreId;
+  kind: OutputKind;
+  frame: string;
+}
+
 export interface Settings {
   platform: string;
+  /** Optional output surface. Absent preserves the legacy native platform canvas. */
+  output?: OutputSpec;
+  /** Export targets included in this project. `platform` is the active target. */
+  targets?: string[];
   fontFamily: string;
   customFont: CustomFont | null;
   titleColor: string;
@@ -171,6 +228,7 @@ export interface Settings {
   subtitleScale: number;
   subtitleWeight: number; // font weight 100..900 (default 400)
   background: Background;
+  composition?: Composition;
   languages?: LanguageTarget[];
   translationContext?: string;
 }
@@ -180,7 +238,12 @@ export interface Slide {
   subhead: string;
   image: ImageSourceLike | null;
   imageDataUrl: string | null;
+  /** Target-specific source and localized screenshots (project format v2). */
+  media?: Record<string, TargetMedia>;
   background?: Background;
+  composition?: Composition;
+  /** Links this device to the matching half on an adjacent slide. */
+  deviceSpan?: { id: string; role: "left" | "right" };
   titleColor?: string;
   subheadColor?: string;
   translations?: Record<string, SlideText>;
@@ -189,6 +252,25 @@ export interface Slide {
 export interface AppState {
   slides: Slide[];
   settings: Settings;
+  releaseBaseline?: ReleaseBaseline;
+}
+
+export interface ReleaseBaseline {
+  version: 1;
+  rendererVersion: number;
+  createdAt: string;
+  signatures: Record<string, string>;
+}
+
+export type ReleaseAssetStatus = "added" | "changed" | "unchanged" | "removed";
+
+export interface ReleaseAssetComparison {
+  key: string;
+  status: ReleaseAssetStatus;
+  slide: number;
+  target: string;
+  language: string;
+  output: string;
 }
 
 export interface RingGroup {

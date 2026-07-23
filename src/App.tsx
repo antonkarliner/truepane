@@ -4,10 +4,25 @@ import JSZip from "jszip";
 import { Sidebar } from "./Sidebar";
 import { MobileLayout } from "./MobileLayout";
 import { SlidePreview } from "./components";
-import { dimFor, getFrame, paintSlide, paintStrip } from "./core/render";
+import { BulkImportDialog, type BulkApplyRow } from "./BulkImportDialog";
+import { PreflightDialog } from "./PreflightDialog";
+import { bulkSlotKey, mapBulkImport, type BulkImportFile, type BulkImportProposal } from "./core/bulk-import";
+import { validateProject, type PreflightIssue } from "./core/preflight";
+import {
+  applyBrandKit,
+  BRAND_KIT_STORAGE_KEY,
+  brandKitFromSettings,
+  normalizeBrandKit,
+  type BrandKit,
+} from "./core/brand-kit";
+import { compareRelease, createReleaseBaseline } from "./core/release";
+import { dimForSettings, getRenderFrame, paintSlide, paintStrip } from "./core/render";
+import { mirrorSpannedMedia, spanDeviceAcrossPair, updateSpannedComposition } from "./core/composition";
+import { outputForSettings } from "./core/output";
 import { FONT_OPTIONS, STORAGE_KEY, defaultState } from "./core/constants";
 import { normalizeAppState, serializeTranslations } from "./core/normalize";
-import type { AppState, Background, Settings, Slide, SlideText } from "./core/types";
+import { getImageAsset, serializeMedia, setImageAsset } from "./core/media";
+import type { AppState, Background, ReleaseAssetComparison, Settings, Slide, SlideText } from "./core/types";
 import { applyTheme, initialTheme, type Theme } from "./theme";
 
 // ---------------------------------------------------------------------------
@@ -26,12 +41,16 @@ function loadState(): AppState {
 function persistState(state: AppState): void {
   try {
     const payload = {
+      version: 2,
       settings: state.settings,
+      releaseBaseline: state.releaseBaseline,
       slides: state.slides.map((s) => ({
         title: s.title,
         subhead: s.subhead,
-        imageDataUrl: s.imageDataUrl || null,
+        media: serializeMedia(s.media),
         background: s.background,
+        composition: s.composition,
+        deviceSpan: s.deviceSpan,
         translations: serializeTranslations(s.translations),
       })),
     };
@@ -41,20 +60,30 @@ function persistState(state: AppState): void {
   }
 }
 
+function loadBrandKits(): BrandKit[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(BRAND_KIT_STORAGE_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.map(normalizeBrandKit) : [];
+  } catch {
+    return [];
+  }
+}
+
 // Return the slide with its title/subhead swapped to the active language's
 // translation. `lang === ""` is the source; any blank translated field falls
 // back to the source so untranslated slides still render. Render code reads
 // slide.title/subhead, so this keeps render.ts language-agnostic.
-function resolveSlide(slide: Slide, lang: string): Slide {
-  if (!lang) return slide;
+function resolveSlide(slide: Slide, lang: string, target: string): Slide {
+  const asset = getImageAsset(slide, target, lang);
+  if (!lang) return { ...slide, image: asset.image ?? null, imageDataUrl: asset.imageDataUrl };
   const t = slide.translations?.[lang];
-  if (!t) return slide;
+  if (!t) return { ...slide, image: asset.image ?? null, imageDataUrl: asset.imageDataUrl };
   return {
     ...slide,
     title: t.title?.trim() ? t.title : slide.title,
     subhead: t.subhead?.trim() ? t.subhead : slide.subhead,
-    image: t.image ?? slide.image,
-    imageDataUrl: t.imageDataUrl ?? slide.imageDataUrl,
+    image: asset.image ?? null,
+    imageDataUrl: asset.imageDataUrl,
   };
 }
 
@@ -77,7 +106,32 @@ function decodeImage(dataUrl: string | null | undefined): Promise<HTMLImageEleme
 async function hydrateImages(slides: Slide[]): Promise<Slide[]> {
   return Promise.all(
     slides.map(async (s) => {
-      const image = (await decodeImage(s.imageDataUrl)) ?? s.image;
+      const media = s.media ? { ...s.media } : undefined;
+      if (media) {
+        for (const [target, value] of Object.entries(media)) {
+          const sourceImage = value.source ? await decodeImage(value.source.imageDataUrl) : null;
+          const source = value.source
+            ? {
+                ...value.source,
+                image: sourceImage,
+                width: value.source.width ?? sourceImage?.naturalWidth,
+                height: value.source.height ?? sourceImage?.naturalHeight,
+              }
+            : undefined;
+          const locales = value.locales
+            ? Object.fromEntries(await Promise.all(Object.entries(value.locales).map(async ([code, asset]) => {
+                const image = await decodeImage(asset.imageDataUrl);
+                return [code, {
+                  ...asset,
+                  image,
+                  width: asset.width ?? image?.naturalWidth,
+                  height: asset.height ?? image?.naturalHeight,
+                }];
+              })))
+            : undefined;
+          media[target] = { ...value, source, locales };
+        }
+      }
       let translations = s.translations;
       if (translations) {
         const entries = await Promise.all(
@@ -88,7 +142,7 @@ async function hydrateImages(slides: Slide[]): Promise<Slide[]> {
         );
         translations = Object.fromEntries(entries);
       }
-      return { ...s, image, translations };
+      return { ...s, image: null, imageDataUrl: null, media, translations };
     }),
   );
 }
@@ -155,6 +209,18 @@ export function App() {
   const [theme, setTheme] = useState<Theme>(initialTheme);
   // Active preview/edit language: "" = source, otherwise a LanguageTarget.code.
   const [activeLang, setActiveLang] = useState("");
+  const [arranging, setArranging] = useState(false);
+  const [bulkImport, setBulkImport] = useState<{
+    proposal: BulkImportProposal;
+    files: Map<string, { dataUrl: string; image: HTMLImageElement }>;
+  } | null>(null);
+  const [preflight, setPreflight] = useState<{
+    issues: PreflightIssue[];
+    pending?: () => void;
+  } | null>(null);
+  const [brandKits, setBrandKits] = useState<BrandKit[]>(loadBrandKits);
+  const [releaseRows, setReleaseRows] = useState<ReleaseAssetComparison[]>([]);
+  const [releaseBusy, setReleaseBusy] = useState(false);
 
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
@@ -184,6 +250,9 @@ export function App() {
     if (!hydrated) return;
     persistState(state);
   }, [state, hydrated]);
+  useEffect(() => {
+    localStorage.setItem(BRAND_KIT_STORAGE_KEY, JSON.stringify(brandKits));
+  }, [brandKits]);
 
   // Keep selection in bounds
   useEffect(() => {
@@ -193,10 +262,14 @@ export function App() {
   }, [state.slides.length, selectedIndex]);
 
   useEffect(() => {
+    setArranging(false);
+  }, [selectedIndex, state.settings.platform]);
+
+  useEffect(() => {
     if (isMobile || !hydrated) return;
     const strip = stripRef.current;
     if (!strip) return;
-    const dim = dimFor(state.settings.platform || "ios");
+    const dim = dimForSettings(state.settings);
     const aspect = dim.W / dim.H;
     const updateWidth = () => {
       // Strip padding (64px), card padding (20px), and a small safety gap
@@ -213,14 +286,44 @@ export function App() {
   // --- Mutators --------------------------------------------------------
   const updateSlide = useCallback((idx: number, patch: Partial<Slide>) => {
     setState((s) => {
-      const next = s.slides.slice();
-      next[idx] = { ...next[idx], ...patch };
-      return { ...s, slides: next };
+      let slides: Slide[];
+      if (patch.composition) {
+        slides = updateSpannedComposition(
+          s.slides,
+          idx,
+          patch.composition,
+          getRenderFrame(s.settings.platform, s.settings.output),
+        );
+      } else {
+        slides = s.slides.slice();
+      }
+      slides[idx] = { ...slides[idx], ...patch };
+      if ("media" in patch || "image" in patch || "imageDataUrl" in patch) {
+        slides = mirrorSpannedMedia(slides, idx);
+      }
+      return { ...s, slides };
     });
   }, []);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
     setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
+  }, []);
+
+  const spanDeviceWithNext = useCallback((idx: number) => {
+    setState((s) => {
+      if (idx < 0 || idx >= s.slides.length - 1) return s;
+      const slides = s.slides.slice();
+      const pair = spanDeviceAcrossPair(
+        slides[idx],
+        slides[idx + 1],
+        s.settings.composition,
+        getRenderFrame(s.settings.platform, s.settings.output),
+        `span-${Date.now()}-${idx}`,
+      );
+      slides[idx] = pair[0];
+      slides[idx + 1] = pair[1];
+      return { ...s, slides };
+    });
   }, []);
 
   const updateBackground = useCallback((patch: Partial<Background>) => {
@@ -297,7 +400,10 @@ export function App() {
   }, [isMobile, selectedIndex, state.slides.length]);
 
   const startStripDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest("button, input, textarea, select")) return;
+    if (
+      e.button !== 0 ||
+      (e.target as HTMLElement).closest("button, input, textarea, select, [data-arranging='true']")
+    ) return;
     const strip = stripRef.current;
     if (!strip) return;
     stripDrag.current = {
@@ -378,6 +484,90 @@ export function App() {
     setFontsReady((x) => x + 1);
   };
 
+  const beginBulkImport = async (selectedFiles: File[]) => {
+    const expanded: { file: File; name: string }[] = [];
+    for (const file of selectedFiles) {
+      const relativeName = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+      if (/\.zip$/i.test(file.name)) {
+        const zip = await JSZip.loadAsync(file);
+        for (const entry of Object.values(zip.files).sort((a, b) => a.name.localeCompare(b.name))) {
+          if (entry.dir || !/\.(png|jpe?g|webp)$/i.test(entry.name)) continue;
+          const blob = await entry.async("blob");
+          expanded.push({ file: new File([blob], entry.name, { type: blob.type }), name: entry.name });
+        }
+      } else {
+        expanded.push({ file, name: relativeName });
+      }
+    }
+    const descriptors: BulkImportFile[] = [];
+    const decoded = new Map<string, { dataUrl: string; image: HTMLImageElement }>();
+    for (let index = 0; index < expanded.length; index++) {
+      const item = expanded[index];
+      const dataUrl = await blobToDataUrl(item.file);
+      const image = await decodeImage(dataUrl);
+      if (!image) continue;
+      const id = `${index}:${item.name}`;
+      descriptors.push({ id, name: item.name, width: image.naturalWidth, height: image.naturalHeight });
+      decoded.set(id, { dataUrl, image });
+    }
+    const targets = state.settings.targets?.length ? state.settings.targets : [state.settings.platform];
+    const languages = (state.settings.languages ?? []).map((language) => language.code);
+    const occupied = new Set<string>();
+    state.slides.forEach((slide, slideIndex) => {
+      for (const target of targets) {
+        for (const language of ["", ...languages]) {
+          if (getImageAsset(slide, target, language).imageDataUrl) {
+            occupied.add(bulkSlotKey({ slideIndex, target, language }));
+          }
+        }
+      }
+    });
+    setBulkImport({
+      proposal: mapBulkImport(descriptors, {
+        slideCount: state.slides.length,
+        targets,
+        languages,
+        occupied,
+      }),
+      files: decoded,
+    });
+  };
+
+  const applyBulkImport = (rows: BulkApplyRow[]) => {
+    if (!bulkImport) return;
+    setState((current) => {
+      let slides = current.slides.slice();
+      const targets = new Set(current.settings.targets ?? [current.settings.platform]);
+      for (const row of rows) {
+        const decoded = bulkImport.files.get(row.fileId);
+        const slide = slides[row.slot.slideIndex];
+        if (!decoded || !slide) continue;
+        slides[row.slot.slideIndex] = setImageAsset(slide, row.slot.target, row.slot.language, {
+          image: decoded.image,
+          imageDataUrl: decoded.dataUrl,
+        });
+        slides = mirrorSpannedMedia(slides, row.slot.slideIndex);
+        targets.add(row.slot.target);
+      }
+      return { ...current, slides, settings: { ...current.settings, targets: [...targets] } };
+    });
+    setBulkImport(null);
+  };
+
+  const createBrandKit = (name: string) => {
+    setBrandKits((kits) => [...kits, brandKitFromSettings(name, state.settings)]);
+  };
+  const renameBrandKit = (id: string, name: string) => {
+    setBrandKits((kits) => kits.map((kit) => kit.id === id ? { ...kit, name: name.trim() || kit.name } : kit));
+  };
+  const useBrandKit = (kit: BrandKit, clearOverrides: boolean) => {
+    setState((current) => applyBrandKit(current, kit, clearOverrides));
+  };
+  const deleteBrandKit = (id: string) => setBrandKits((kits) => kits.filter((kit) => kit.id !== id));
+  const importBrandKit = (kit: BrandKit) => {
+    setBrandKits((kits) => [...kits.filter((item) => item.id !== kit.id), kit]);
+  };
+
   // Re-register a custom font if loaded from storage
   useEffect(() => {
     const cf = state.settings.customFont;
@@ -400,8 +590,11 @@ export function App() {
   const totalSlides = state.slides.length;
 
   // Filename prefixes follow the frame's target store, not the exact device.
-  const slidePrefix = () => (getFrame(state.settings.platform).store === "playstore" ? "android" : "ios");
-  const stripPrefix = () => (getFrame(state.settings.platform).store === "playstore" ? "playstore" : "appstore");
+  const slidePrefix = () => {
+    const output = outputForSettings(state.settings);
+    return output.id === "play-feature" ? "play-feature" : output.store === "playstore" ? "android" : "ios";
+  };
+  const stripPrefix = () => (outputForSettings(state.settings).store === "playstore" ? "playstore" : "appstore");
 
   const downloadCanvas = async (canvas: HTMLCanvasElement, filename: string) => {
     const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), "image/png"));
@@ -423,7 +616,7 @@ export function App() {
     setExporting("png");
     const slide = state.slides[selectedIndex];
     const c = document.createElement("canvas");
-    await paintSlide(c, resolveSlide(slide, activeLang), state.settings, selectedIndex, totalSlides);
+    await paintSlide(c, resolveSlide(slide, activeLang, state.settings.platform), state.settings, selectedIndex, totalSlides);
     const safe = slideSlug(slide, selectedIndex);
     const platformPrefix = slidePrefix();
     await downloadCanvas(
@@ -436,7 +629,7 @@ export function App() {
   const exportStrip = async () => {
     setExporting("strip");
     const c = document.createElement("canvas");
-    await paintStrip(c, state.slides.map((s) => resolveSlide(s, activeLang)), state.settings);
+    await paintStrip(c, state.slides.map((s) => resolveSlide(s, activeLang, state.settings.platform)), state.settings);
     const platformPrefix = stripPrefix();
     await downloadCanvas(c, `${platformPrefix}-${langTag()}strip-${totalSlides}x.png`);
     setExporting(null);
@@ -449,12 +642,12 @@ export function App() {
     for (let i = 0; i < state.slides.length; i++) {
       const slide = state.slides[i];
       const c = document.createElement("canvas");
-      await paintSlide(c, resolveSlide(slide, activeLang), state.settings, i, totalSlides);
+      await paintSlide(c, resolveSlide(slide, activeLang, state.settings.platform), state.settings, i, totalSlides);
       const blob = await new Promise<Blob>((res) => c.toBlob((b) => res(b!), "image/png"));
       zip.file(`${platformPrefix}-${langTag()}${String(i + 1).padStart(2, "0")}-${slideSlug(slide, i)}.png`, blob);
     }
     const stripCanvas = document.createElement("canvas");
-    await paintStrip(stripCanvas, state.slides.map((s) => resolveSlide(s, activeLang)), state.settings);
+    await paintStrip(stripCanvas, state.slides.map((s) => resolveSlide(s, activeLang, state.settings.platform)), state.settings);
     const stripBlob = await new Promise<Blob>((res) => stripCanvas.toBlob((b) => res(b!), "image/png"));
     zip.file(`${platformPrefix}-${langTag()}strip-${totalSlides}x.png`, stripBlob);
     const out = await zip.generateAsync({ type: "blob" });
@@ -472,30 +665,36 @@ export function App() {
   const exportAllLanguages = async () => {
     setExporting("all");
     const zip = new JSZip();
-    const platformPrefix = slidePrefix();
+    const targets = state.settings.targets?.length
+      ? state.settings.targets
+      : [state.settings.platform];
     const langs: { code: string; folder: string }[] = [
       { code: "", folder: "source" },
       ...(state.settings.languages ?? []).map((l) => ({ code: l.code, folder: l.code })),
     ];
-    for (const { code, folder } of langs) {
-      const dir = zip.folder(folder)!;
-      for (let i = 0; i < state.slides.length; i++) {
-        const slide = state.slides[i];
-        const c = document.createElement("canvas");
-        await paintSlide(c, resolveSlide(slide, code), state.settings, i, totalSlides);
-        const blob = await new Promise<Blob>((res) => c.toBlob((b) => res(b!), "image/png"));
-        dir.file(`${platformPrefix}-${String(i + 1).padStart(2, "0")}-${slideSlug(slide, i)}.png`, blob);
+    for (const target of targets) {
+      const targetSettings = { ...state.settings, platform: target };
+      const platformPrefix = outputForSettings(targetSettings).store === "playstore" ? "android" : "ios";
+      for (const { code, folder } of langs) {
+        const dir = zip.folder(`${target}/${folder}`)!;
+        for (let i = 0; i < state.slides.length; i++) {
+          const slide = state.slides[i];
+          const c = document.createElement("canvas");
+          await paintSlide(c, resolveSlide(slide, code, target), targetSettings, i, totalSlides);
+          const blob = await new Promise<Blob>((res) => c.toBlob((b) => res(b!), "image/png"));
+          dir.file(`${platformPrefix}-${String(i + 1).padStart(2, "0")}-${slideSlug(slide, i)}.png`, blob);
+        }
+        const stripCanvas = document.createElement("canvas");
+        await paintStrip(stripCanvas, state.slides.map((s) => resolveSlide(s, code, target)), targetSettings);
+        const stripBlob = await new Promise<Blob>((res) => stripCanvas.toBlob((b) => res(b!), "image/png"));
+        dir.file(`${platformPrefix}-strip-${totalSlides}x.png`, stripBlob);
       }
-      const stripCanvas = document.createElement("canvas");
-      await paintStrip(stripCanvas, state.slides.map((s) => resolveSlide(s, code)), state.settings);
-      const stripBlob = await new Promise<Blob>((res) => stripCanvas.toBlob((b) => res(b!), "image/png"));
-      dir.file(`${platformPrefix}-strip-${totalSlides}x.png`, stripBlob);
     }
     const out = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(out);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${platformPrefix}-all-languages.zip`;
+    a.download = "truepane-all-targets.zip";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
     setExporting(null);
@@ -504,12 +703,16 @@ export function App() {
   // JSON export/import
   const exportJson = () => {
     const payload = {
+      version: 2,
       settings: state.settings,
+      releaseBaseline: state.releaseBaseline,
       slides: state.slides.map((s) => ({
         title: s.title,
         subhead: s.subhead,
-        imageDataUrl: s.imageDataUrl || null,
+        media: serializeMedia(s.media),
         background: s.background,
+        composition: s.composition,
+        deviceSpan: s.deviceSpan,
         translations: serializeTranslations(s.translations),
       })),
     };
@@ -528,6 +731,57 @@ export function App() {
     const slides = await hydrateImages(s.slides);
     setState({ ...s, slides });
     setSelectedIndex(0);
+  };
+
+  const openPreflight = (pending?: () => void) => {
+    const issues = validateProject(state);
+    if (!issues.length && pending) {
+      pending();
+      return;
+    }
+    setPreflight({ issues, pending });
+  };
+
+  const guardedExport = (action: () => void) => () => openPreflight(action);
+
+  const refreshRelease = async () => {
+    setReleaseBusy(true);
+    setReleaseRows(await compareRelease(state));
+    setReleaseBusy(false);
+  };
+
+  const exportChangedRelease = async () => {
+    setReleaseBusy(true);
+    const rows = (await compareRelease(state)).filter((row) => row.status === "added" || row.status === "changed");
+    const zip = new JSZip();
+    for (const row of rows) {
+      const slide = state.slides[row.slide];
+      if (!slide) continue;
+      const settings = { ...state.settings, platform: row.target };
+      const canvas = document.createElement("canvas");
+      await paintSlide(canvas, resolveSlide(slide, row.language, row.target), settings, row.slide, state.slides.length);
+      const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/png"));
+      zip.file(`${row.target}/${row.language || "source"}/slide-${String(row.slide + 1).padStart(2, "0")}.png`, blob);
+    }
+    const manifest = rows.map(({ key, status }) => ({ key, status }));
+    zip.file("release-manifest.json", JSON.stringify(manifest, null, 2));
+    const out = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(out);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "truepane-release-changes.zip";
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    setReleaseRows(await compareRelease(state));
+    setReleaseBusy(false);
+  };
+
+  const setCurrentReleaseBaseline = async () => {
+    setReleaseBusy(true);
+    const baseline = await createReleaseBaseline(state);
+    setState((current) => ({ ...current, releaseBaseline: baseline }));
+    setReleaseRows((await compareRelease({ ...state, releaseBaseline: baseline })));
+    setReleaseBusy(false);
   };
 
   // --- Eyedropper -------------------------------------------------------
@@ -565,7 +819,39 @@ export function App() {
   }, [eyedropTarget]);
 
   const selected = state.slides[selectedIndex];
-  const platformDim = dimFor(state.settings.platform || "ios");
+  const platformDim = dimForSettings(state.settings);
+  const overlays = (
+    <>
+      {bulkImport && (
+        <BulkImportDialog
+          proposal={bulkImport.proposal}
+          slideCount={state.slides.length}
+          targets={state.settings.targets?.length ? state.settings.targets : [state.settings.platform]}
+          languages={(state.settings.languages ?? []).map((language) => language.code)}
+          onApply={applyBulkImport}
+          onCancel={() => setBulkImport(null)}
+        />
+      )}
+      {preflight && (
+        <PreflightDialog
+          issues={preflight.issues}
+          canContinue={!!preflight.pending}
+          onOpenIssue={(issue) => {
+            updateSettings({ platform: issue.target });
+            setActiveLang(issue.language);
+            setSelectedIndex(issue.slide);
+            setPreflight(null);
+          }}
+          onContinue={() => {
+            const pending = preflight.pending;
+            setPreflight(null);
+            pending?.();
+          }}
+          onClose={() => setPreflight(null)}
+        />
+      )}
+    </>
+  );
 
   // --- Render ----------------------------------------------------------
   if (!hydrated) {
@@ -574,6 +860,7 @@ export function App() {
 
   if (isMobile) {
     return (
+      <>
       <MobileLayout
         state={state}
         selectedIndex={selectedIndex}
@@ -588,9 +875,9 @@ export function App() {
         deleteSelected={() => deleteSlide(selectedIndex)}
         moveSelected={(dir) => moveSlide(selectedIndex, selectedIndex + dir)}
         addSlide={addSlide}
-        exportPng={exportPng}
-        exportStrip={exportStrip}
-        exportZip={exportZip}
+        exportPng={guardedExport(exportPng)}
+        exportStrip={guardedExport(exportStrip)}
+        exportZip={guardedExport(exportZip)}
         exportJson={exportJson}
         importJson={importJson}
         exporting={exporting}
@@ -599,7 +886,25 @@ export function App() {
         onToggleTheme={toggleTheme}
         eyedropTarget={eyedropTarget}
         pickColorFromSlide={pickColorFromSlide}
+        arranging={arranging}
+        onToggleArrange={() => setArranging((value) => !value)}
+        onSpanDevice={() => spanDeviceWithNext(selectedIndex)}
+        onBulkFiles={beginBulkImport}
+        onRunPreflight={() => openPreflight()}
+        brandKits={brandKits}
+        onCreateBrandKit={createBrandKit}
+        onRenameBrandKit={renameBrandKit}
+        onApplyBrandKit={useBrandKit}
+        onDeleteBrandKit={deleteBrandKit}
+        onImportBrandKit={importBrandKit}
+        releaseRows={releaseRows}
+        releaseBusy={releaseBusy}
+        onCompareRelease={refreshRelease}
+        onExportChanged={() => openPreflight(() => void exportChangedRelease())}
+        onSetReleaseBaseline={setCurrentReleaseBaseline}
       />
+      {overlays}
+      </>
     );
   }
 
@@ -621,16 +926,32 @@ export function App() {
         setActiveLang={setActiveLang}
         updateSlideTranslation={(lang, patch) => updateSlideTranslation(selectedIndex, lang, patch)}
         applyTranslations={applyTranslations}
-        exportPng={exportPng}
-        exportStrip={exportStrip}
-        exportZip={exportZip}
-        exportAllLanguages={exportAllLanguages}
+        exportPng={guardedExport(exportPng)}
+        exportStrip={guardedExport(exportStrip)}
+        exportZip={guardedExport(exportZip)}
+        exportAllLanguages={guardedExport(exportAllLanguages)}
         exportJson={exportJson}
         importJson={importJson}
         exporting={exporting}
         requestEyedrop={requestEyedrop}
         theme={theme}
         onToggleTheme={toggleTheme}
+        arranging={arranging}
+        onToggleArrange={() => setArranging((value) => !value)}
+        onSpanDevice={() => spanDeviceWithNext(selectedIndex)}
+        onBulkFiles={beginBulkImport}
+        onRunPreflight={() => openPreflight()}
+        brandKits={brandKits}
+        onCreateBrandKit={createBrandKit}
+        onRenameBrandKit={renameBrandKit}
+        onApplyBrandKit={useBrandKit}
+        onDeleteBrandKit={deleteBrandKit}
+        onImportBrandKit={importBrandKit}
+        releaseRows={releaseRows}
+        releaseBusy={releaseBusy}
+        onCompareRelease={refreshRelease}
+        onExportChanged={() => openPreflight(() => void exportChangedRelease())}
+        onSetReleaseBaseline={setCurrentReleaseBaseline}
       />
       <main className="stage">
         <div className="stage__bar">
@@ -669,7 +990,7 @@ export function App() {
           {state.slides.map((slide, i) => (
             <SlidePreview
               key={i}
-              slide={resolveSlide(slide, activeLang)}
+              slide={resolveSlide(slide, activeLang, state.settings.platform)}
               settings={state.settings}
               slideIndex={i}
               totalSlides={totalSlides}
@@ -683,6 +1004,8 @@ export function App() {
               onDelete={state.slides.length > 1 ? () => deleteSlide(i) : null}
               eyedropping={!!eyedropTarget}
               onPickColor={pickColorFromSlide}
+              arranging={arranging && i === selectedIndex}
+              onCompositionChange={(composition) => updateSlide(i, { composition })}
             />
           ))}
           <button className="add-card" onClick={addSlide}>
@@ -691,6 +1014,7 @@ export function App() {
           </button>
         </div>
       </main>
+      {overlays}
     </div>
   );
 }

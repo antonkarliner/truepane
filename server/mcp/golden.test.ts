@@ -113,3 +113,28 @@ it("Node render matches the golden reference within tolerance", async () => {
     `${(fraction * 100).toFixed(3)}% of pixels differ by >${MAX_CHANNEL_DELTA}/channel (limit ${MAX_DIFF_FRACTION * 100}%)`,
   ).toBeLessThanOrEqual(MAX_DIFF_FRACTION);
 });
+
+it("renders the Google Play feature graphic at exactly 1024x500", async () => {
+  registerDefaultFonts();
+  const state = defaultState();
+  state.settings.platform = "android";
+  state.settings.output = {
+    id: "play-feature",
+    label: "Google Play feature graphic",
+    width: 1024,
+    height: 500,
+    store: "playstore",
+    kind: "feature",
+    frame: "android",
+  };
+  const slide: Slide = {
+    title: "Brew Better Coffee",
+    subhead: "Guided recipes for every brewer.",
+    image: syntheticScreenshot() as unknown as Slide["image"],
+    imageDataUrl: null,
+  };
+  const canvas = createCanvas(1, 1);
+  await paintSlide(canvas as unknown as CanvasLike, slide, state.settings, 0, 1);
+  expect({ w: canvas.width, h: canvas.height }).toEqual({ w: 1024, h: 500 });
+  expect(canvas.getContext("2d").getImageData(512, 250, 1, 1).data[3]).toBeGreaterThan(0);
+});

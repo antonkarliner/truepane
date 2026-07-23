@@ -5,6 +5,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { defaultState } from "../../src/core/constants";
 import { normalizeAppState, serializeTranslations } from "../../src/core/normalize";
+import { serializeMedia } from "../../src/core/media";
 import type { AppState, ImageSourceLike } from "../../src/core/types";
 import { tryLoadImage } from "./canvas";
 
@@ -84,12 +85,18 @@ async function decodeDataUrl(dataUrl: string): Promise<ImageSourceLike | null> {
  * base screenshot on each slide plus any per-locale translation screenshots. */
 export async function hydrateImages(state: AppState): Promise<void> {
   for (const slide of state.slides) {
-    if (slide.imageDataUrl && !slide.image) {
-      slide.image = await decodeDataUrl(slide.imageDataUrl);
-    }
-    for (const t of Object.values(slide.translations ?? {})) {
-      if (t.imageDataUrl && !t.image) {
-        t.image = await decodeDataUrl(t.imageDataUrl);
+    for (const target of Object.values(slide.media ?? {})) {
+      if (target.source?.imageDataUrl && !target.source.image) {
+        target.source.image = await decodeDataUrl(target.source.imageDataUrl);
+        target.source.width ??= target.source.image?.naturalWidth ?? target.source.image?.width;
+        target.source.height ??= target.source.image?.naturalHeight ?? target.source.image?.height;
+      }
+      for (const asset of Object.values(target.locales ?? {})) {
+        if (asset.imageDataUrl && !asset.image) {
+          asset.image = await decodeDataUrl(asset.imageDataUrl);
+          asset.width ??= asset.image?.naturalWidth ?? asset.image?.width;
+          asset.height ??= asset.image?.naturalHeight ?? asset.image?.height;
+        }
       }
     }
   }
@@ -99,12 +106,16 @@ export async function hydrateImages(state: AppState): Promise<void> {
  * exportJson in src/App.tsx) — keep in sync so files round-trip. */
 export function projectJson(state: AppState): string {
   const payload = {
+    version: 2,
     settings: state.settings,
+    releaseBaseline: state.releaseBaseline,
     slides: state.slides.map((s) => ({
       title: s.title,
       subhead: s.subhead,
-      imageDataUrl: s.imageDataUrl || null,
+      media: serializeMedia(s.media),
       background: s.background,
+      composition: s.composition,
+      deviceSpan: s.deviceSpan,
       translations: serializeTranslations(s.translations),
     })),
   };

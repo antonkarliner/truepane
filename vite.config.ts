@@ -92,9 +92,12 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
             `<link rel="canonical" href="${siteUrl}/" />`,
             `<meta property="og:url" content="${siteUrl}/" />`,
             `<meta property="og:image" content="${siteUrl}/og-image.png" />`,
+            `<meta property="og:image:type" content="image/png" />`,
             `<meta property="og:image:width" content="1200" />`,
             `<meta property="og:image:height" content="630" />`,
+            `<meta property="og:image:alt" content="Truepane editor composing a store screenshot set" />`,
             `<meta name="twitter:image" content="${siteUrl}/og-image.png" />`,
+            `<meta name="twitter:image:alt" content="Truepane editor composing a store screenshot set" />`,
           ].join("\n")
         : "";
       return html

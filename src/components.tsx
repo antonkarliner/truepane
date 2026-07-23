@@ -1,7 +1,24 @@
 // UI components for Truepane.
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { dimFor, paintSlide } from "./core/render";
-import type { RingLayout, Settings, Slide } from "./core/types";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
+import { dimForSettings, getRenderFrame, paintSlide } from "./core/render";
+import {
+  clampDevicePosition,
+  COMPOSITION_PRESETS,
+  devicePolygon,
+  normalizeComposition,
+  pointInPolygon,
+  resolveComposition,
+  snapDevicePosition,
+} from "./core/composition";
+import type { Composition, OutputSpec, RingLayout, Settings, Slide, TextAlign } from "./core/types";
 
 declare global {
   interface Window {
@@ -23,6 +40,8 @@ export function SlidePreview({
   onDelete,
   eyedropping = false,
   onPickColor,
+  arranging = false,
+  onCompositionChange,
 }: {
   slide: Slide;
   settings: Settings;
@@ -34,9 +53,21 @@ export function SlidePreview({
   onDelete: (() => void) | null;
   eyedropping?: boolean;
   onPickColor?: (hex: string) => void;
+  arranging?: boolean;
+  onCompositionChange?: (composition: Composition) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const reqRef = useRef(0);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    deviceX: number;
+    deviceY: number;
+    base: Composition;
+  } | null>(null);
+  const [dragComposition, setDragComposition] = useState<Composition | null>(null);
+  const dragCompositionRef = useRef<Composition | null>(null);
 
   // In eyedrop mode a click samples the pixel under the cursor (cross-browser
   // fallback for the native EyeDropper API); otherwise it selects the slide.
@@ -53,22 +84,105 @@ export function SlidePreview({
       }
       return;
     }
-    onSelect();
+    if (!arranging) onSelect();
   };
+
+  const effectiveSlide = dragComposition ? { ...slide, composition: dragComposition } : slide;
+  const dim = dimForSettings(settings);
+  const aspect = dim.W / dim.H;
+  const displayHeight = displayWidth / aspect;
+  const renderScale = Math.min(1, (displayWidth * Math.min(window.devicePixelRatio || 1, 2)) / dim.W);
 
   useEffect(() => {
     const cur = ++reqRef.current;
     void (async () => {
       const c = canvasRef.current;
       if (!c) return;
-      await paintSlide(c, slide, settings, slideIndex, totalSlides);
+      await paintSlide(c, effectiveSlide, settings, slideIndex, totalSlides, renderScale);
       if (cur !== reqRef.current) return; // stale render
     })();
-  }, [slide, settings, slideIndex, totalSlides]);
+  }, [effectiveSlide, settings, slideIndex, totalSlides, renderScale]);
 
-  const dim = dimFor(settings.platform || "ios");
-  const aspect = dim.W / dim.H;
-  const displayHeight = displayWidth / aspect;
+  const pointOnCanvas = (e: { clientX: number; clientY: number }) => {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * dim.W,
+      y: ((e.clientY - rect.top) / rect.height) * dim.H,
+    };
+  };
+
+  const startArrange = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!arranging || !selected || e.button !== 0 || !onCompositionChange) return;
+    const frame = getRenderFrame(settings.platform || "ios", settings.output);
+    const base = normalizeComposition(slide.composition ?? settings.composition);
+    const resolved = resolveComposition(base, frame);
+    if (!pointInPolygon(pointOnCanvas(e), devicePolygon(resolved, frame))) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      deviceX: resolved.device.x,
+      deviceY: resolved.device.y,
+      base,
+    };
+  };
+
+  const moveArrange = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const frame = getRenderFrame(settings.platform || "ios", settings.output);
+    const current = resolveComposition(drag.base, frame);
+    let next = clampDevicePosition(
+      drag.deviceX + (e.clientX - drag.startX) / rect.width,
+      drag.deviceY + (e.clientY - drag.startY) / rect.height,
+      current,
+      frame,
+    );
+    if (!e.altKey) next = snapDevicePosition(next.x, next.y);
+    const composition = {
+      ...drag.base,
+      device: { ...drag.base.device, x: next.x, y: next.y },
+    };
+    dragCompositionRef.current = composition;
+    setDragComposition(composition);
+  };
+
+  const endArrange = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    if (dragCompositionRef.current) onCompositionChange?.(dragCompositionRef.current);
+    dragCompositionRef.current = null;
+    dragRef.current = null;
+    setDragComposition(null);
+  };
+
+  const nudge = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (!arranging || !selected || !onCompositionChange) return;
+    const delta = e.shiftKey ? 10 : 1;
+    const frame = getRenderFrame(settings.platform || "ios", settings.output);
+    const base = normalizeComposition(slide.composition ?? settings.composition);
+    const resolved = resolveComposition(base, frame);
+    let x = resolved.device.x;
+    let y = resolved.device.y;
+    if (e.key === "ArrowLeft") x -= delta / frame.W;
+    else if (e.key === "ArrowRight") x += delta / frame.W;
+    else if (e.key === "ArrowUp") y -= delta / frame.H;
+    else if (e.key === "ArrowDown") y += delta / frame.H;
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+    const next = clampDevicePosition(x, y, resolved, frame);
+    onCompositionChange({ ...base, device: { ...base.device, ...next } });
+  };
 
   return (
     <div
@@ -78,13 +192,20 @@ export function SlidePreview({
     >
       <div
         className="slide-card__select"
-        style={{ cursor: eyedropping ? "crosshair" : undefined }}
+        style={{ cursor: eyedropping ? "crosshair" : arranging && selected ? "grab" : undefined }}
         onClick={handleClick}
+        onPointerDown={startArrange}
+        onPointerMove={moveArrange}
+        onPointerUp={endArrange}
+        onPointerCancel={endArrange}
+        data-arranging={arranging && selected ? "true" : undefined}
         role="button"
         tabIndex={0}
         aria-label={`Select slide ${slideIndex + 1}${selected ? ", selected" : ""}`}
         aria-pressed={selected}
         onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
+          nudge(e);
+          if (e.defaultPrevented) return;
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             onSelect();
@@ -96,6 +217,12 @@ export function SlidePreview({
           ref={canvasRef}
           style={{ width: displayWidth, height: displayHeight, display: "block", borderRadius: 12 }}
         />
+        {arranging && selected && (
+          <div className="arrange-guides" aria-hidden="true">
+            <span className="arrange-guide arrange-guide--x" />
+            <span className="arrange-guide arrange-guide--y" />
+          </div>
+        )}
       </div>
       {onDelete && (
         <button
@@ -110,6 +237,92 @@ export function SlidePreview({
           ×
         </button>
       )}
+    </div>
+  );
+}
+
+export function CompositionControls({
+  platform,
+  output,
+  composition,
+  hasOverride,
+  arranging,
+  onChange,
+  onToggleOverride,
+  onToggleArrange,
+  onSpanDevice,
+  canSpanDevice,
+}: {
+  platform: string;
+  output?: OutputSpec;
+  composition: Composition | undefined;
+  hasOverride: boolean;
+  arranging: boolean;
+  onChange: (composition: Composition) => void;
+  onToggleOverride: () => void;
+  onToggleArrange: () => void;
+  onSpanDevice: () => void;
+  canSpanDevice: boolean;
+}) {
+  const normalized = normalizeComposition(composition);
+  const resolved = resolveComposition(normalized, getRenderFrame(platform, output));
+  const patchDevice = (patch: Partial<typeof resolved.device>) =>
+    onChange({ ...normalized, device: { ...normalized.device, ...patch } });
+  const patchText = (patch: Partial<typeof resolved.text>) =>
+    onChange({ ...normalized, text: { ...normalized.text, ...patch } });
+
+  return (
+    <div className="composition-controls">
+      <Field label="Layout preset">
+        <select
+          className="text-input"
+          aria-label="Composition preset"
+          value={normalized.preset}
+          onChange={(e) => onChange({ preset: e.target.value as Composition["preset"] })}
+        >
+          {COMPOSITION_PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>{preset.name}</option>
+          ))}
+        </select>
+      </Field>
+      <button className={"ghost small arrange-btn" + (arranging ? " active" : "")} onClick={onToggleArrange}>
+        {arranging ? "Done arranging" : "Arrange on canvas"}
+      </button>
+      <button className="ghost small" disabled={!canSpanDevice} onClick={onSpanDevice}>
+        Span device across next slide
+      </button>
+      <Field label={`Device horizontal · ${Math.round(resolved.device.x * 100)}%`}>
+        <input className="slider" type="range" min="-0.4" max="1.4" step="0.005"
+          value={resolved.device.x} onChange={(e) => patchDevice({ x: Number(e.target.value) })} />
+      </Field>
+      <Field label={`Device vertical · ${Math.round(resolved.device.y * 100)}%`}>
+        <input className="slider" type="range" min="-0.4" max="1.4" step="0.005"
+          value={resolved.device.y} onChange={(e) => patchDevice({ y: Number(e.target.value) })} />
+      </Field>
+      <Field label={`Device size · ${Math.round(resolved.device.scale * 100)}%`}>
+        <input className="slider" type="range" min="0.4" max="1.6" step="0.01"
+          value={resolved.device.scale} onChange={(e) => patchDevice({ scale: Number(e.target.value) })} />
+      </Field>
+      <Field label={`Device angle · ${resolved.device.rotation.toFixed(0)}°`}>
+        <input className="slider" type="range" min="-20" max="20" step="1"
+          value={resolved.device.rotation} onChange={(e) => patchDevice({ rotation: Number(e.target.value) })} />
+      </Field>
+      <Field label="Text alignment">
+        <Segmented
+          value={resolved.text.align}
+          onChange={(value) => patchText({ align: value as TextAlign })}
+          options={[
+            { value: "left", label: "Left" },
+            { value: "center", label: "Center" },
+            { value: "right", label: "Right" },
+          ]}
+        />
+      </Field>
+      <button className="ghost small" onClick={() => onChange({ preset: normalized.preset })}>Reset preset</button>
+      <label className="ai-lock">
+        <input type="checkbox" checked={hasOverride} onChange={onToggleOverride} />
+        Override composition for this slide only
+      </label>
     </div>
   );
 }

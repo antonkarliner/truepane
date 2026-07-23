@@ -56,17 +56,37 @@ async function main(): Promise<void> {
     const names = tools.tools.map((t) => t.name).sort();
     console.error("tools:", names.join(", "));
     assert.deepEqual(names, [
+      "apply_brand_kit",
+      "compare_release",
       "create_project",
+      "export_brand_kit",
       "export_project",
+      "import_screenshots",
       "list_options",
       "load_project",
       "render",
+      "set_output",
+      "set_release_baseline",
       "set_screenshots",
       "set_slides",
       "set_style",
       "set_translations",
+      "span_device_across_slides",
       "suggest_palette_from_screenshot",
+      "validate_project",
     ]);
+    const discovery = firstText(await client.callTool({ name: "list_options", arguments: {} }));
+    for (const capability of [
+      "Multi-target or bulk media",
+      "span_device_across_slides",
+      "export_brand_kit",
+      "Google Play feature",
+      "validate_project",
+      "render changed_only",
+      "export_project and load_project",
+    ]) {
+      assert.match(discovery, new RegExp(capability), `list_options did not surface ${capability}`);
+    }
 
     // 2) create a 2-slide iOS project
     const created = await client.callTool({
@@ -81,6 +101,45 @@ async function main(): Promise<void> {
       },
     });
     assert.match(firstText(created), /Project "smoke".*1320x2868px/s);
+
+    // 2b) bulk import is preview-first and applies only with explicit opt-in.
+    await client.callTool({
+      name: "create_project",
+      arguments: {
+        id: "bulk-smoke",
+        targets: ["ios", "android"],
+        slides: [{ title: "One" }, { title: "Two" }],
+      },
+    });
+    const importDir = path.join(tmp, "bulk-import");
+    fs.mkdirSync(path.join(importDir, "ios", "source"), { recursive: true });
+    fs.mkdirSync(path.join(importDir, "android", "source"), { recursive: true });
+    fs.copyFileSync(shot1, path.join(importDir, "ios", "source", "01-home.png"));
+    fs.copyFileSync(shot2, path.join(importDir, "android", "source", "02-detail.png"));
+    const dryBulk = await client.callTool({
+      name: "import_screenshots",
+      arguments: { project_id: "bulk-smoke", directory: importDir },
+    });
+    assert.match(firstText(dryBulk), /Dry run only/);
+    const bulkBefore = path.join(tmp, "bulk-before.json");
+    await client.callTool({ name: "export_project", arguments: { project_id: "bulk-smoke", path: bulkBefore } });
+    assert.equal(JSON.parse(fs.readFileSync(bulkBefore, "utf8")).slides[0].media, undefined);
+    const appliedBulk = await client.callTool({
+      name: "import_screenshots",
+      arguments: { project_id: "bulk-smoke", directory: importDir, dry_run: false, apply: true },
+    });
+    assert.match(firstText(appliedBulk), /Applied 2 screenshot/);
+    const bulkAfter = path.join(tmp, "bulk-after.json");
+    await client.callTool({ name: "export_project", arguments: { project_id: "bulk-smoke", path: bulkAfter } });
+    const bulkParsed = JSON.parse(fs.readFileSync(bulkAfter, "utf8"));
+    assert.ok(bulkParsed.slides[0].media.ios.source.imageDataUrl);
+    assert.ok(bulkParsed.slides[1].media.android.source.imageDataUrl);
+    const bulkPreflight = firstText(await client.callTool({
+      name: "validate_project",
+      arguments: { project_id: "bulk-smoke" },
+    }));
+    assert.match(bulkPreflight, /missing-target-screenshot/);
+    assert.match(bulkPreflight, /screenshot-aspect-crop/);
 
     // 3) style: linear gradient + bubbles shape
     const styled = await client.callTool({
@@ -105,6 +164,61 @@ async function main(): Promise<void> {
     assert.match(firstText(styled), /"fill":"linear"/);
     assert.match(firstText(styled), /"shape":"bubbles"/);
 
+    // 3a) one device can be cleanly clipped across an adjacent slide pair.
+    const spanned = await client.callTool({
+      name: "span_device_across_slides",
+      arguments: { project_id: "smoke", left_slide_index: 0 },
+    });
+    assert.match(firstText(spanned), /Spanned one device across slides 0 and 1/);
+    const spanPath = path.join(tmp, "span-check.json");
+    await client.callTool({ name: "export_project", arguments: { project_id: "smoke", path: spanPath } });
+    const spanCheck = JSON.parse(fs.readFileSync(spanPath, "utf8"));
+    assert.equal(spanCheck.slides[0].composition.device.x, 1);
+    assert.equal(spanCheck.slides[1].composition.device.x, 0);
+    assert.equal(
+      spanCheck.slides[1].media.ios.source.imageDataUrl,
+      spanCheck.slides[0].media.ios.source.imageDataUrl,
+    );
+    await client.callTool({
+      name: "set_screenshots",
+      arguments: { project_id: "smoke", screenshots: [{ index: 1, path: shot2 }] },
+    });
+    const mediaPath = path.join(tmp, "span-media-check.json");
+    await client.callTool({ name: "export_project", arguments: { project_id: "smoke", path: mediaPath } });
+    const mediaCheck = JSON.parse(fs.readFileSync(mediaPath, "utf8"));
+    assert.equal(
+      mediaCheck.slides[0].media.ios.source.imageDataUrl,
+      mediaCheck.slides[1].media.ios.source.imageDataUrl,
+    );
+    await client.callTool({
+      name: "set_screenshots",
+      arguments: { project_id: "smoke", screenshots: [{ index: 0, path: shot1 }] },
+    });
+
+    // 3b) brand kit export/apply restores style without changing project media.
+    const brandPath = path.join(tmp, "smoke.truepane-brand.json");
+    await client.callTool({
+      name: "export_brand_kit",
+      arguments: { project_id: "smoke", path: brandPath, name: "Smoke brand" },
+    });
+    const brandParsed = JSON.parse(fs.readFileSync(brandPath, "utf8"));
+    assert.equal(brandParsed.version, 1);
+    assert.equal(brandParsed.style.titleColor, "#2d1b0e");
+    assert.equal(brandParsed.slides, undefined);
+    await client.callTool({
+      name: "set_style",
+      arguments: { project_id: "smoke", titleColor: "#ffffff" },
+    });
+    await client.callTool({
+      name: "apply_brand_kit",
+      arguments: { project_id: "smoke", path: brandPath },
+    });
+    const brandCheckPath = path.join(tmp, "brand-check.json");
+    await client.callTool({ name: "export_project", arguments: { project_id: "smoke", path: brandCheckPath } });
+    const brandCheck = JSON.parse(fs.readFileSync(brandCheckPath, "utf8"));
+    assert.equal(brandCheck.settings.titleColor, "#2d1b0e");
+    assert.ok(brandCheck.slides[0].media.ios.source.imageDataUrl);
+
     // 4) render slides + strip at full resolution
     const rendered = await client.callTool({
       name: "render",
@@ -122,6 +236,72 @@ async function main(): Promise<void> {
     const preview = (rendered as { content: { type: string }[] }).content.find((c) => c.type === "image");
     assert.ok(preview, "render returned no preview image");
 
+    // 4b) feature/custom outputs have exact bounded dimensions.
+    await client.callTool({
+      name: "set_output",
+      arguments: { project_id: "smoke", output_id: "play-feature", frame: "android" },
+    });
+    const featureDir = path.join(outDir, "feature");
+    await client.callTool({
+      name: "render",
+      arguments: { project_id: "smoke", output_dir: featureDir, what: "slides" },
+    });
+    assert.deepEqual(pngSize(path.join(featureDir, "slide-01.png")), { w: 1024, h: 500 });
+    const customDir = path.join(outDir, "custom");
+    await client.callTool({
+      name: "render",
+      arguments: {
+        project_id: "smoke",
+        output_dir: customDir,
+        what: "slides",
+        output_id: "custom",
+        output_width: 1200,
+        output_height: 700,
+        output_frame: "android",
+      },
+    });
+    assert.deepEqual(pngSize(path.join(customDir, "slide-01.png")), { w: 1200, h: 700 });
+    await client.callTool({
+      name: "set_output",
+      arguments: { project_id: "smoke", output_id: "ios" },
+    });
+
+    // 4c) explicit release baselines drive changed-only manifests/renders.
+    const beforeBaseline = firstText(await client.callTool({
+      name: "compare_release",
+      arguments: { project_id: "smoke" },
+    }));
+    assert.match(beforeBaseline, /"added":4/);
+    await client.callTool({ name: "set_release_baseline", arguments: { project_id: "smoke" } });
+    const unchangedRelease = firstText(await client.callTool({
+      name: "compare_release",
+      arguments: { project_id: "smoke" },
+    }));
+    assert.match(unchangedRelease, /"unchanged":4/);
+    await client.callTool({
+      name: "set_slides",
+      arguments: {
+        project_id: "smoke",
+        slides: [
+          { title: "Brew Better Coffee — Updated", subhead: "Guided recipes for every brewer." },
+          { title: "Track Every Cup", subhead: "Your brew history, beautifully organized." },
+        ],
+      },
+    });
+    const changedRelease = firstText(await client.callTool({
+      name: "compare_release",
+      arguments: { project_id: "smoke" },
+    }));
+    assert.match(changedRelease, /"changed":2/);
+    const changedDir = path.join(outDir, "changed-only");
+    const changedRender = firstText(await client.callTool({
+      name: "render",
+      arguments: { project_id: "smoke", output_dir: changedDir, what: "slides", changed_only: true },
+    }));
+    assert.ok(fs.existsSync(path.join(changedDir, "slide-01.png")));
+    assert.ok(!fs.existsSync(path.join(changedDir, "slide-02.png")));
+    assert.match(changedRender, /Skipped unchanged/);
+
     // 5) palette extraction from a project slide (shot1 is dominantly #c2410c)
     const palette = firstText(
       await client.callTool({
@@ -132,6 +312,29 @@ async function main(): Promise<void> {
     console.error(palette);
     assert.match(palette, /accent \(dominant vivid color\): #[0-9a-f]{6}/);
     assert.match(palette, /set_style/);
+
+    // 5b) target-specific media stays separate and render target:"all" writes
+    // one platform folder per configured target.
+    await client.callTool({
+      name: "set_screenshots",
+      arguments: {
+        project_id: "smoke",
+        screenshots: [{ index: 0, path: shot1, target: "android" }],
+      },
+    });
+    const multiDir = path.join(outDir, "targets");
+    await client.callTool({
+      name: "render",
+      arguments: {
+        project_id: "smoke",
+        output_dir: multiDir,
+        what: "slides",
+        scale: 0.25,
+        target: "all",
+      },
+    });
+    assert.deepEqual(pngSize(path.join(multiDir, "ios", "slide-01.png")), { w: 330, h: 717 });
+    assert.deepEqual(pngSize(path.join(multiDir, "android", "slide-01.png")), { w: 270, h: 600 });
 
     // 6) agent-supplied translations: slide-count mismatch must fail loudly…
     const badTr = (await client.callTool({
@@ -280,18 +483,21 @@ async function main(): Promise<void> {
     const projFile = path.join(tmp, "truepane-project.json");
     await client.callTool({ name: "export_project", arguments: { project_id: "smoke", path: projFile } });
     const parsed = JSON.parse(fs.readFileSync(projFile, "utf8"));
+    assert.equal(parsed.version, 2);
+    assert.equal(parsed.releaseBaseline.version, 1);
     assert.equal(parsed.slides.length, 2);
-    assert.ok(parsed.slides[0].imageDataUrl.startsWith("data:image/png;base64,"));
+    assert.ok(parsed.slides[0].media.ios.source.imageDataUrl.startsWith("data:image/png;base64,"));
+    assert.ok(parsed.slides[0].media.android.source.imageDataUrl.startsWith("data:image/png;base64,"));
     assert.equal(parsed.settings.background.shape, "bubbles");
     assert.equal(parsed.settings.titleWeight, 800, "titleWeight should round-trip in exported settings");
     assert.equal(parsed.settings.subtitleWeight, 400, "subtitleWeight should round-trip in exported settings");
     assert.equal(parsed.slides[0].translations.es.title, "Prepara mejor café");
     assert.ok(
-      parsed.slides[1].translations.es.imageDataUrl?.startsWith("data:image/png;base64,"),
+      parsed.slides[1].media.ios.locales.es.imageDataUrl?.startsWith("data:image/png;base64,"),
       "per-locale screenshot should round-trip in the exported JSON",
     );
     assert.ok(
-      !("image" in parsed.slides[1].translations.es),
+      !("image" in parsed.slides[1].media.ios.locales.es),
       "the live image must not leak into exported JSON",
     );
     assert.deepEqual(

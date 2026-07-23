@@ -10,10 +10,27 @@ import * as path from "node:path";
 import { z } from "zod";
 import { FONT_OPTIONS } from "../../src/core/constants";
 import { normalizeBackground } from "../../src/core/normalize";
+import { COMPOSITION_PRESETS, mirrorSpannedMedia, normalizeComposition, spanDeviceAcrossPair, updateSpannedComposition } from "../../src/core/composition";
+import { getImageAsset, setImageAsset } from "../../src/core/media";
+import { bulkSlotKey, mapBulkImport } from "../../src/core/bulk-import";
+import { validateProject } from "../../src/core/preflight";
+import {
+  applyBrandKit,
+  brandKitFromSettings,
+  MAX_BRAND_KIT_BYTES,
+  normalizeBrandKit,
+} from "../../src/core/brand-kit";
+import { BUILTIN_OUTPUTS, normalizeOutput, outputForSettings } from "../../src/core/output";
+import {
+  compareRelease,
+  createReleaseBaseline,
+  releaseAssetKey,
+} from "../../src/core/release";
 import {
   dimFor,
   FILL_OPTIONS,
   getFrame,
+  getRenderFrame,
   paintSlide,
   paintStrip,
   PLATFORMS,
@@ -41,6 +58,7 @@ const FONT_IDS = FONT_OPTIONS.map((f) => f.id);
 const SHAPE_IDS = SHAPE_FAMILIES.map((s) => s.id);
 const FILL_IDS = FILL_OPTIONS.map((f) => f.id);
 const RING_LAYOUT_IDS = RING_LAYOUTS.map((l) => l.id);
+const OUTPUT_CHOICES = ["ios", "ipad", "android", "android-tablet", "play-feature", "custom"] as const;
 
 const platformList = PLATFORMS.map((p) => {
   const d = dimFor(p.id);
@@ -70,6 +88,22 @@ const backgroundSchema = z
 
 type BackgroundPatch = z.infer<typeof backgroundSchema>;
 
+const compositionSchema = z.object({
+  preset: z.enum(COMPOSITION_PRESETS.map((p) => p.id) as [string, ...string[]]).optional(),
+  text: z.object({
+    x: z.number().min(-0.5).max(1.5).optional(),
+    y: z.number().min(-0.5).max(1.5).optional(),
+    width: z.number().min(0.2).max(1.2).optional(),
+    align: z.enum(["left", "center", "right"]).optional(),
+  }).partial().optional(),
+  device: z.object({
+    x: z.number().min(-0.5).max(1.5).optional(),
+    y: z.number().min(-0.5).max(1.5).optional(),
+    scale: z.number().min(0.4).max(1.6).optional(),
+    rotation: z.number().min(-20).max(20).optional(),
+  }).partial().optional(),
+}).partial();
+
 function patchBackground(base: Background, patch: BackgroundPatch): Background {
   return normalizeBackground({ ...base, ...patch });
 }
@@ -82,6 +116,25 @@ function assertPlatform(platform: string): void {
   if (!PLATFORM_IDS.includes(platform)) {
     throw new Error(`Unknown platform "${platform}". Valid: ${PLATFORM_IDS.join(", ")}`);
   }
+}
+
+function imageFilesUnder(directory: string): { absolutePath: string; relativePath: string }[] {
+  const root = path.resolve(directory);
+  const out: { absolutePath: string; relativePath: string }[] = [];
+  const visit = (current: string) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const absolutePath = path.resolve(current, entry.name);
+      if (absolutePath !== root && !absolutePath.startsWith(`${root}${path.sep}`)) {
+        throw new Error(`Refusing path outside import directory: ${absolutePath}`);
+      }
+      if (entry.isDirectory()) visit(absolutePath);
+      else if (entry.isFile() && /\.(png|jpe?g|webp)$/i.test(entry.name)) {
+        out.push({ absolutePath, relativePath: path.relative(root, absolutePath).split(path.sep).join("/") });
+      }
+    }
+  };
+  visit(root);
+  return out.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 
 // Warn (not fail) when a screenshot's aspect ratio is off from the device
@@ -147,26 +200,27 @@ function ensureTranslation(slide: Slide, code: string): SlideText {
 }
 
 function summarize(state: AppState, id: string): string {
-  const d = dimFor(state.settings.platform);
+  const d = outputForSettings(state.settings);
   const lines = state.slides.map(
-    (s, i) => `  ${i + 1}. "${s.title}" — "${s.subhead}"${s.imageDataUrl ? " [screenshot]" : " [no screenshot]"}`,
+    (s, i) => `  ${i + 1}. "${s.title}" — "${s.subhead}"${getImageAsset(s, state.settings.platform).imageDataUrl ? " [screenshot]" : " [no screenshot]"}`,
   );
-  return `Project "${id}" — platform ${state.settings.platform} (${d.storeLabel}, ${d.W}x${d.H}px), font ${state.settings.fontFamily}, ${state.slides.length} slides:\n${lines.join("\n")}`;
+  return `Project "${id}" — active target ${state.settings.platform}, output ${d.label} (${d.width}x${d.height}px), targets ${(state.settings.targets ?? [state.settings.platform]).join(", ")}, font ${state.settings.fontFamily}, ${state.slides.length} slides:\n${lines.join("\n")}`;
 }
 
 // Swap a slide's title/subhead to a language's translation. Mirrors
 // resolveSlide in src/App.tsx exactly: `lang === ""` is the source text, and
 // any blank translated field falls back to the source string.
-function resolveSlide(slide: Slide, lang: string): Slide {
-  if (!lang) return slide;
+function resolveSlide(slide: Slide, lang: string, target: string): Slide {
+  const asset = getImageAsset(slide, target, lang);
+  if (!lang) return { ...slide, image: asset.image ?? null, imageDataUrl: asset.imageDataUrl };
   const t = slide.translations?.[lang];
-  if (!t) return slide;
+  if (!t) return { ...slide, image: asset.image ?? null, imageDataUrl: asset.imageDataUrl };
   return {
     ...slide,
     title: t.title?.trim() ? t.title : slide.title,
     subhead: t.subhead?.trim() ? t.subhead : slide.subhead,
-    image: t.image ?? slide.image,
-    imageDataUrl: t.imageDataUrl ?? slide.imageDataUrl,
+    image: asset.image ?? null,
+    imageDataUrl: asset.imageDataUrl,
   };
 }
 
@@ -197,11 +251,11 @@ export function registerTools(server: McpServer): void {
   server.registerTool(
     "list_options",
     {
-      title: "List style options",
+      title: "List capabilities and style options",
       description:
-        "List every valid value for Truepane projects: platforms/device frames with exact export pixel " +
-        "dimensions, fonts, background fills, shape overlays, and ring layouts. Call this first to learn " +
-        "valid ids before create_project or set_style.",
+        "Start here. Lists Truepane's complete agent workflow and every valid platform, output, font, " +
+        "background, and composition option, including bulk import, multi-target sets, linked devices, " +
+        "preflight, brand kits, custom outputs, and changed-only release exports.",
       inputSchema: {},
     },
     async () => {
@@ -222,6 +276,10 @@ export function registerTools(server: McpServer): void {
           "Platforms (settings.platform):",
           ...platforms,
           "",
+          "Output formats:",
+          ...BUILTIN_OUTPUTS.map((output) => `- "${output.id}": ${output.label} — ${output.width}x${output.height}`),
+          '- "custom": bounded custom width/height (320..8192, maximum 40 megapixels)',
+          "",
           "Fonts (settings.fontFamily):",
           ...fonts,
           "",
@@ -234,7 +292,20 @@ export function registerTools(server: McpServer): void {
           'Ring layouts (background.ringLayout, only for shape "rings"):',
           ...rings,
           "",
-          "Workflow: create_project → set_style (and set_slides / set_screenshots) → render → inspect the preview → adjust → render.",
+          `Composition presets: ${COMPOSITION_PRESETS.map((p) => `"${p.id}" (${p.name})`).join(", ")}. ` +
+            "Device rotation is flat 2D and bounded to -20..20 degrees.",
+          "",
+          "Capabilities and tools:",
+          "- Build/edit projects: create_project, set_slides, set_screenshots, set_translations",
+          "- Multi-target or bulk media: create_project targets, set_screenshots target/language, import_screenshots (dry-run first)",
+          "- Compose freely: set_style composition controls normalized text/device position, size, and rotation",
+          "- Span one linked device across adjacent slides: span_device_across_slides (media and geometry stay synchronized)",
+          "- Reuse visual systems: export_brand_kit, apply_brand_kit",
+          "- Native, Google Play feature, or custom canvases: set_output",
+          "- Release safety: validate_project, compare_release, set_release_baseline, render changed_only",
+          "- Human handoff: export_project and load_project round-trip with the web editor",
+          "",
+          "Recommended workflow: create_project → set/import screenshots → set_style → validate_project → render → inspect preview → adjust → render.",
         ].join("\n"),
       );
     },
@@ -251,6 +322,10 @@ export function registerTools(server: McpServer): void {
         "Slides without a screenshot render a placeholder. After creating, style with set_style, then call render.",
       inputSchema: {
         id: z.string().optional().describe("Project id (slug). Auto-generated if omitted."),
+        targets: z
+          .array(z.enum(PLATFORM_IDS as [string, ...string[]]))
+          .optional()
+          .describe("Platform targets included in the project. The first is active."),
         platform: z
           .enum(PLATFORM_IDS as [string, ...string[]])
           .optional()
@@ -267,18 +342,22 @@ export function registerTools(server: McpServer): void {
           .describe("Slides in order (1-8 typical)"),
       },
     },
-    async ({ id, platform, slides }) => {
+    async ({ id, platform, targets, slides }) => {
       if (platform) assertPlatform(platform);
       const project = createProject(id);
       const state = project.state;
-      if (platform) state.settings.platform = platform;
+      const selectedTargets = targets?.length ? Array.from(new Set(targets)) : [platform ?? state.settings.platform];
+      state.settings.targets = selectedTargets;
+      state.settings.platform = platform ?? selectedTargets[0];
       const notes: string[] = [];
       state.slides = [];
       for (let i = 0; i < slides.length; i++) {
         const s = slides[i];
         const slide: Slide = { title: s.title, subhead: s.subhead ?? "", image: null, imageDataUrl: null };
         if (s.screenshot_path) {
-          await applyScreenshot(slide, s.screenshot_path, state.settings.platform, `slide ${i + 1}`, notes);
+          const asset = { image: null, imageDataUrl: null };
+          await applyScreenshot(asset, s.screenshot_path, state.settings.platform, `slide ${i + 1}`, notes);
+          Object.assign(slide, setImageAsset(slide, state.settings.platform, "", asset));
         }
         state.slides.push(slide);
       }
@@ -321,17 +400,25 @@ export function registerTools(server: McpServer): void {
           subhead: s.subhead ?? "",
           image: prev?.image ?? null,
           imageDataUrl: prev?.imageDataUrl ?? null,
+          media: prev?.media,
           background: prev?.background,
+          composition: prev?.composition,
+          deviceSpan: prev?.deviceSpan,
           titleColor: prev?.titleColor,
           subheadColor: prev?.subheadColor,
           translations: prev?.translations,
         };
         if (s.screenshot_path) {
-          await applyScreenshot(slide, s.screenshot_path, state.settings.platform, `slide ${i + 1}`, notes);
+          const asset = { image: null, imageDataUrl: null };
+          await applyScreenshot(asset, s.screenshot_path, state.settings.platform, `slide ${i + 1}`, notes);
+          Object.assign(slide, setImageAsset(slide, state.settings.platform, "", asset));
         }
         next.push(slide);
       }
       state.slides = next;
+      for (let i = 0; i < slides.length; i++) {
+        if (slides[i].screenshot_path) state.slides = mirrorSpannedMedia(state.slides, i);
+      }
       const noteBlock = notes.length ? `\nNotes:\n${notes.map((n) => `- ${n}`).join("\n")}` : "";
       return text(`${summarize(state, project.id)}${noteBlock}`);
     },
@@ -356,6 +443,10 @@ export function registerTools(server: McpServer): void {
             z.object({
               index: z.number().int().min(0).describe("0-based slide index"),
               path: z.string().describe("Absolute path to the screenshot file"),
+              target: z
+                .enum(PLATFORM_IDS as [string, ...string[]])
+                .optional()
+                .describe("Platform target. Defaults to the active target for v1 compatibility."),
               language: z
                 .string()
                 .optional()
@@ -373,21 +464,142 @@ export function registerTools(server: McpServer): void {
       const project = getProject(project_id);
       const state = project.state;
       const notes: string[] = [];
-      for (const { index, path: p, language, language_name } of screenshots) {
+      for (const { index, path: p, target, language, language_name } of screenshots) {
         if (index >= state.slides.length) {
           throw new Error(`Slide index ${index} out of range (project has ${state.slides.length} slides).`);
         }
         const slide = state.slides[index];
+        const platformTarget = target ?? state.settings.platform;
+        const asset = { image: null, imageDataUrl: null };
+        await applyScreenshot(
+          asset,
+          p,
+          platformTarget,
+          `slide ${index + 1} [${platformTarget}${language ? `/${language}` : ""}]`,
+          notes,
+        );
+        state.slides[index] = setImageAsset(slide, platformTarget, language ?? "", asset);
+        state.slides = mirrorSpannedMedia(state.slides, index);
+        state.settings.targets = Array.from(new Set([...(state.settings.targets ?? []), platformTarget]));
         if (language) {
-          const target = ensureTranslation(slide, language);
-          await applyScreenshot(target, p, state.settings.platform, `slide ${index + 1} [${language}]`, notes);
+          ensureTranslation(state.slides[index], language);
           mergeLanguage(state, language, language_name);
-        } else {
-          await applyScreenshot(slide, p, state.settings.platform, `slide ${index + 1}`, notes);
         }
       }
       const noteBlock = notes.length ? `\nNotes:\n${notes.map((n) => `- ${n}`).join("\n")}` : "";
       return text(`${summarize(state, project.id)}${noteBlock}`);
+    },
+  );
+
+  server.registerTool(
+    "import_screenshots",
+    {
+      title: "Preview or apply a screenshot folder",
+      description:
+        "Deterministically map a local screenshot directory to target/locale/slide slots. " +
+        "Defaults to a read-only dry run. Files named target/locale/NN-name.png map explicitly; " +
+        "otherwise known dimensions and filename tokens are used. Conflicts are reported and never overwritten.",
+      inputSchema: {
+        project_id: z.string().describe("Project id"),
+        directory: z.string().describe("Absolute directory containing PNG/JPEG/WebP screenshots"),
+        dry_run: z.boolean().optional().describe("Preview only (default true)"),
+        apply: z.boolean().optional().describe("Must be true to apply non-conflicting mappings"),
+      },
+    },
+    async ({ project_id, directory, dry_run, apply }) => {
+      if (!path.isAbsolute(directory)) throw new Error(`directory must be absolute, got: ${directory}`);
+      const root = path.resolve(directory);
+      if (!fs.statSync(root).isDirectory()) throw new Error(`Not a directory: ${root}`);
+      const project = getProject(project_id);
+      const state = project.state;
+      const targets = state.settings.targets ?? [state.settings.platform];
+      const languages = (state.settings.languages ?? []).map((language) => language.code);
+      const files = imageFilesUnder(root);
+      const descriptors = await Promise.all(files.map(async (file, index) => {
+        const image = await tryLoadImage(fs.readFileSync(file.absolutePath));
+        return {
+          id: String(index),
+          name: file.relativePath,
+          width: image?.width ?? 0,
+          height: image?.height ?? 0,
+        };
+      }));
+      const occupied = new Set<string>();
+      state.slides.forEach((slide, slideIndex) => {
+        for (const target of targets) {
+          for (const language of ["", ...languages]) {
+            if (getImageAsset(slide, target, language).imageDataUrl) {
+              occupied.add(bulkSlotKey({ slideIndex, target, language }));
+            }
+          }
+        }
+      });
+      const proposal = mapBulkImport(descriptors, {
+        slideCount: state.slides.length,
+        targets,
+        languages,
+        occupied,
+      });
+      const shouldApply = apply === true && dry_run !== true;
+      let applied = 0;
+      if (shouldApply) {
+        for (const assignment of proposal.assignments) {
+          if (assignment.conflict) continue;
+          const file = files[Number(assignment.file.id)];
+          if (!file) continue;
+          const loaded = await loadScreenshot(file.absolutePath);
+          state.slides[assignment.slot.slideIndex] = setImageAsset(
+            state.slides[assignment.slot.slideIndex],
+            assignment.slot.target,
+            assignment.slot.language,
+            { image: loaded.image, imageDataUrl: loaded.dataUrl },
+          );
+          state.slides = mirrorSpannedMedia(state.slides, assignment.slot.slideIndex);
+          applied++;
+        }
+      }
+      const mapped = proposal.assignments.map((item) =>
+        `- ${item.file.name} -> ${item.slot.target}/${item.slot.language || "source"}/slide-${item.slot.slideIndex + 1}` +
+        `${item.conflict ? ` [${item.conflict}]` : ""}`,
+      );
+      const unmapped = proposal.unmapped.map((item) => `- ${item.file.name} [${item.reason}]`);
+      return text([
+        shouldApply ? `Applied ${applied} screenshot(s).` : "Dry run only; project was not changed.",
+        mapped.length ? `Mapped:\n${mapped.join("\n")}` : "Mapped: none",
+        unmapped.length ? `Unmapped:\n${unmapped.join("\n")}` : "Unmapped: none",
+        shouldApply ? "" : "Call again with apply:true and dry_run:false to apply non-conflicting mappings.",
+      ].filter(Boolean).join("\n"));
+    },
+  );
+
+  server.registerTool(
+    "span_device_across_slides",
+    {
+      title: "Span a device across two slides",
+      description:
+        "Place one identical device across the boundary between an adjacent slide pair. " +
+        "The left slide exports the left half and the next slide exports the right half; their text and backgrounds remain independent.",
+      inputSchema: {
+        project_id: z.string().describe("Project id"),
+        left_slide_index: z.number().int().min(0).describe("0-based index of the first slide"),
+      },
+    },
+    async ({ project_id, left_slide_index }) => {
+      const project = getProject(project_id);
+      const state = project.state;
+      if (left_slide_index >= state.slides.length - 1) {
+        throw new Error("The first slide must have a following slide.");
+      }
+      const [left, right] = spanDeviceAcrossPair(
+        state.slides[left_slide_index],
+        state.slides[left_slide_index + 1],
+        state.settings.composition,
+        getRenderFrame(state.settings.platform, state.settings.output),
+        `span-${Date.now()}-${left_slide_index}`,
+      );
+      state.slides[left_slide_index] = left;
+      state.slides[left_slide_index + 1] = right;
+      return text(`Spanned one device across slides ${left_slide_index} and ${left_slide_index + 1}.\n${summarize(state, project.id)}`);
     },
   );
 
@@ -402,7 +614,8 @@ export function registerTools(server: McpServer): void {
         `(${PLATFORM_IDS.join(" | ")}), and background — a partial patch merged onto the current background. ` +
         "Background fields: fill (solid|linear|radial), shape (see list_options), color, gradientColor, accent, " +
         "accentOpacity (0..1), ringLayout, ringCount (1..8), seed, density (1..8), dotsAligned, gradientAngle. " +
-        "With slide_index (0-based), background/titleColor/subheadColor apply as per-slide overrides instead " +
+        "Composition supports a preset plus normalized text/device placement, scale, and flat rotation (-20..20). " +
+        "With slide_index (0-based), background/titleColor/subheadColor/composition apply as per-slide overrides instead " +
         "(other fields are global-only and rejected). With language (a locale code, e.g. \"ar\"), fontFamily " +
         "sets that locale's font override — used only when rendering that language, while the base keeps the " +
         "global font (pass only fontFamily). Re-render after changes to see the result.",
@@ -433,15 +646,18 @@ export function registerTools(server: McpServer): void {
           .optional()
           .describe("Switch device frame (global only)"),
         background: backgroundSchema.optional().describe("Partial background patch"),
+        composition: compositionSchema.optional().describe(
+          "Composition preset and optional text/device placement. Device x/y are normalized canvas coordinates; rotation is -20..20 degrees.",
+        ),
       },
     },
-    async ({ project_id, slide_index, language, fontFamily, titleColor, subheadColor, titleScale, subtitleScale, titleWeight, subtitleWeight, platform, background }) => {
+    async ({ project_id, slide_index, language, fontFamily, titleColor, subheadColor, titleScale, subtitleScale, titleWeight, subtitleWeight, platform, background, composition }) => {
       const project = getProject(project_id);
       const state = project.state;
       if (language !== undefined) {
         if (slide_index !== undefined) throw new Error("Pass either language or slide_index, not both.");
         if (!fontFamily) throw new Error('set_style with language sets that locale\'s font — pass fontFamily (a font id from list_options).');
-        if (titleColor !== undefined || subheadColor !== undefined || background || titleScale !== undefined || subtitleScale !== undefined || titleWeight !== undefined || subtitleWeight !== undefined || platform) {
+        if (titleColor !== undefined || subheadColor !== undefined || background || composition || titleScale !== undefined || subtitleScale !== undefined || titleWeight !== undefined || subtitleWeight !== undefined || platform) {
           throw new Error("With language, only fontFamily is applied (per-language font override). Set colors/background/scale/weight/platform without language.");
         }
         mergeLanguage(state, language, undefined, fontFamily);
@@ -460,11 +676,26 @@ export function registerTools(server: McpServer): void {
         if (background) {
           slide.background = patchBackground(slide.background ?? state.settings.background, background);
         }
+        if (composition) {
+          const nextComposition = normalizeComposition({
+            ...(slide.composition ?? state.settings.composition),
+            ...composition,
+            text: { ...(slide.composition ?? state.settings.composition)?.text, ...composition.text },
+            device: { ...(slide.composition ?? state.settings.composition)?.device, ...composition.device },
+          });
+          state.slides = updateSpannedComposition(
+            state.slides,
+            slide_index,
+            nextComposition,
+            getRenderFrame(state.settings.platform, state.settings.output),
+          );
+        }
         return text(`Updated slide ${slide_index} overrides.\n${summarize(state, project.id)}`);
       }
       if (platform) {
         assertPlatform(platform);
         state.settings.platform = platform;
+        state.settings.targets = Array.from(new Set([...(state.settings.targets ?? []), platform]));
       }
       if (fontFamily) state.settings.fontFamily = fontFamily;
       if (titleColor !== undefined) state.settings.titleColor = titleColor;
@@ -476,9 +707,170 @@ export function registerTools(server: McpServer): void {
       if (background) {
         state.settings.background = patchBackground(state.settings.background, background);
       }
+      if (composition) {
+        state.settings.composition = normalizeComposition({
+          ...state.settings.composition,
+          ...composition,
+          text: { ...state.settings.composition?.text, ...composition.text },
+          device: { ...state.settings.composition?.device, ...composition.device },
+        });
+      }
       return text(
         `Style updated. Background now: ${JSON.stringify(state.settings.background)}\n${summarize(state, project.id)}`,
       );
+    },
+  );
+
+  server.registerTool(
+    "apply_brand_kit",
+    {
+      title: "Apply a brand kit file",
+      description:
+        "Apply typography, text colors, background, and default composition from a local .truepane-brand.json file. " +
+        "Targets, slides, screenshots, translations, and release data are preserved. Per-slide overrides are preserved by default.",
+      inputSchema: {
+        project_id: z.string().describe("Project id"),
+        path: z.string().describe("Absolute path to a .truepane-brand.json file"),
+        clear_slide_overrides: z.boolean().optional().describe("Explicitly clear per-slide style/composition overrides"),
+      },
+    },
+    async ({ project_id, path: kitPath, clear_slide_overrides }) => {
+      if (!path.isAbsolute(kitPath)) throw new Error(`Brand kit path must be absolute, got: ${kitPath}`);
+      const stat = fs.statSync(kitPath);
+      if (stat.size > MAX_BRAND_KIT_BYTES) throw new Error("Brand kit file is too large.");
+      const kit = normalizeBrandKit(JSON.parse(fs.readFileSync(kitPath, "utf8")));
+      const project = getProject(project_id);
+      project.state = applyBrandKit(project.state, kit, clear_slide_overrides === true);
+      return text(`Applied brand kit "${kit.name}"${clear_slide_overrides ? " and cleared slide overrides" : ""}.\n${summarize(project.state, project.id)}`);
+    },
+  );
+
+  server.registerTool(
+    "export_brand_kit",
+    {
+      title: "Export a brand kit file",
+      description:
+        "Write this project's current typography, colors, background, custom font, and default composition to a portable brand kit file.",
+      inputSchema: {
+        project_id: z.string().describe("Project id"),
+        path: z.string().describe("Absolute output path, conventionally ending .truepane-brand.json"),
+        name: z.string().optional().describe("Brand kit display name"),
+      },
+    },
+    async ({ project_id, path: kitPath, name }) => {
+      if (!path.isAbsolute(kitPath)) throw new Error(`Brand kit path must be absolute, got: ${kitPath}`);
+      const project = getProject(project_id);
+      const kit = brandKitFromSettings(name ?? project.id, project.state.settings);
+      fs.mkdirSync(path.dirname(kitPath), { recursive: true });
+      fs.writeFileSync(kitPath, JSON.stringify(kit, null, 2));
+      return text(`Exported brand kit "${kit.name}" to ${kitPath}`);
+    },
+  );
+
+  server.registerTool(
+    "set_output",
+    {
+      title: "Set output canvas",
+      description:
+        "Choose a native store screenshot, the 1024x500 Google Play feature graphic, or bounded custom dimensions. " +
+        "The device frame remains procedural and is never stretched.",
+      inputSchema: {
+        project_id: z.string().describe("Project id"),
+        output_id: z.enum(OUTPUT_CHOICES).describe("Built-in output id or custom"),
+        width: z.number().optional().describe("Custom width"),
+        height: z.number().optional().describe("Custom height"),
+        frame: z.enum(PLATFORM_IDS as [string, ...string[]]).optional().describe("Device frame/source target"),
+      },
+    },
+    async ({ project_id, output_id, width, height, frame }) => {
+      const project = getProject(project_id);
+      const state = project.state;
+      const builtin = BUILTIN_OUTPUTS.find((output) => output.id === output_id);
+      if (builtin?.kind === "native") {
+        state.settings.platform = builtin.frame;
+        state.settings.output = undefined;
+      } else {
+        state.settings.output = normalizeOutput(
+          builtin
+            ? { ...builtin, frame: frame ?? builtin.frame }
+            : {
+                id: "custom",
+                label: "Custom output",
+                width,
+                height,
+                store: getFrame(frame ?? state.settings.platform).store,
+                frame: frame ?? state.settings.platform,
+              },
+          frame ?? state.settings.platform,
+        );
+        if (state.settings.output) state.settings.platform = state.settings.output.frame;
+      }
+      state.settings.targets = Array.from(new Set([...(state.settings.targets ?? []), state.settings.platform]));
+      const output = outputForSettings(state.settings);
+      return text(`Output set to "${output.id}" (${output.width}x${output.height}) with frame "${output.frame}".`);
+    },
+  );
+
+  server.registerTool(
+    "validate_project",
+    {
+      title: "Run release preflight",
+      description:
+        "Return the same ordered release-preflight issues shown by the web editor. Validation is advisory; " +
+        "stable issue codes are suitable for automation.",
+      inputSchema: {
+        project_id: z.string().describe("Project id"),
+      },
+    },
+    async ({ project_id }) => {
+      const project = getProject(project_id);
+      const issues = validateProject(project.state);
+      if (!issues.length) return text("Preflight passed: no issues.");
+      return text([
+        `Preflight found ${issues.length} issue(s):`,
+        ...issues.map((issue) =>
+          `- [${issue.severity}] ${issue.code} target=${issue.target} language=${issue.language || "source"} slide=${issue.slide + 1}: ${issue.message}`,
+        ),
+      ].join("\n"));
+    },
+  );
+
+  server.registerTool(
+    "compare_release",
+    {
+      title: "Compare with release baseline",
+      description:
+        "Compare deterministic slide/output/locale signatures with the explicit saved release baseline. " +
+        "Returns added, changed, unchanged, and removed assets without rendering PNGs or changing the baseline.",
+      inputSchema: { project_id: z.string().describe("Project id") },
+    },
+    async ({ project_id }) => {
+      const state = getProject(project_id).state;
+      const rows = await compareRelease(state);
+      const counts = Object.fromEntries(["added", "changed", "unchanged", "removed"].map((status) => [
+        status,
+        rows.filter((row) => row.status === status).length,
+      ]));
+      return text([
+        `Release comparison: ${JSON.stringify(counts)}`,
+        ...rows.map((row) => `- [${row.status}] ${row.key}`),
+      ].join("\n"));
+    },
+  );
+
+  server.registerTool(
+    "set_release_baseline",
+    {
+      title: "Set release baseline",
+      description:
+        "Explicitly replace the project's release baseline with deterministic signatures for the current assets. " +
+        "Previewing, importing, validating, and rendering never call this automatically.",
+      inputSchema: { project_id: z.string().describe("Project id") },
+    },
+    async ({ project_id }) => {
+      const project = getProject(project_id);
+      project.state.releaseBaseline = await createReleaseBaseline(project.state);
+      return text(`Release baseline set with ${Object.keys(project.state.releaseBaseline.signatures).length} asset signature(s).`);
     },
   );
 
@@ -502,52 +894,109 @@ export function registerTools(server: McpServer): void {
         output_dir: z.string().describe("Absolute directory for the PNGs (created if missing)"),
         what: z.enum(["slides", "strip", "both"]).optional().describe('What to render. Default "slides".'),
         scale: z.number().gt(0).max(1).optional().describe("Downscale factor for draft output (default 1 = full store resolution)"),
+        target: z
+          .union([z.enum(PLATFORM_IDS as [string, ...string[]]), z.literal("all")])
+          .optional()
+          .describe('Platform target. Omit = active target; "all" = every settings.targets target.'),
+        output_id: z.enum(OUTPUT_CHOICES).optional()
+          .describe("Temporary output override for this render"),
+        output_width: z.number().optional().describe("Custom output width"),
+        output_height: z.number().optional().describe("Custom output height"),
+        output_frame: z.enum(PLATFORM_IDS as [string, ...string[]]).optional().describe("Device frame for feature/custom output"),
+        changed_only: z.boolean().optional().describe("Write only added/changed assets compared with the explicit release baseline"),
         language: z
           .string()
           .optional()
           .describe('Omit = base text; a language code = that translation; "all" = per-language subfolders'),
       },
     },
-    async ({ project_id, output_dir, what, scale, language }) => {
+    async ({ project_id, output_dir, what, scale, target, output_id, output_width, output_height, output_frame, changed_only, language }) => {
       const project = getProject(project_id);
       const state = project.state;
       if (!path.isAbsolute(output_dir)) throw new Error(`output_dir must be an absolute path, got: ${output_dir}`);
+      if (changed_only && output_id) throw new Error("changed_only uses the project's persisted output; set_output before comparing/rendering.");
       await ensureFontsForState(state);
       const mode = what ?? "slides";
       const k = scale ?? 1;
       const notes: string[] = [];
+      const renderOutput = output_id
+        ? normalizeOutput(
+            output_id === "custom"
+              ? {
+                  id: "custom",
+                  label: "Custom output",
+                  width: output_width,
+                  height: output_height,
+                  store: getFrame(output_frame ?? state.settings.platform).store,
+                  frame: output_frame ?? state.settings.platform,
+                }
+              : {
+                  ...BUILTIN_OUTPUTS.find((output) => output.id === output_id),
+                  frame: output_frame ?? BUILTIN_OUTPUTS.find((output) => output.id === output_id)?.frame,
+                },
+            output_frame ?? state.settings.platform,
+          )
+        : state.settings.output;
+      const preflightIssues = validateProject(state);
+      if (preflightIssues.length) {
+        const codes = Array.from(new Set(preflightIssues.map((issue) => issue.code)));
+        notes.push(`preflight: ${preflightIssues.length} advisory issue(s) (${codes.join(", ")}); run validate_project for the full matrix`);
+      }
 
       // Which languages go where. Mirrors exportAllLanguages in src/App.tsx:
       // "all" = source/ + one folder per settings.languages code.
       const lang = language ?? "";
-      let targets: { code: string; dir: string }[];
+      let languageTargets: { code: string; folder: string }[];
       if (lang === "all") {
         const langs = state.settings.languages ?? [];
         if (langs.length === 0) notes.push('language "all": project has no settings.languages — only source/ was written (run set_translations first)');
-        targets = [
-          { code: "", dir: path.join(output_dir, "source") },
-          ...langs.map((l) => ({ code: l.code, dir: path.join(output_dir, l.code) })),
+        languageTargets = [
+          { code: "", folder: "source" },
+          ...langs.map((l) => ({ code: l.code, folder: l.code })),
         ];
       } else {
         if (lang && !state.slides.some((s) => s.translations?.[lang])) {
           notes.push(`no slide has a translation for "${lang}" — rendered base text (run set_translations first)`);
         }
-        targets = [{ code: lang, dir: output_dir }];
+        languageTargets = [{ code: lang, folder: "" }];
       }
 
       const out: string[] = [];
+      const skipped: string[] = [];
+      const releaseRows = changed_only ? await compareRelease(state) : [];
+      const releaseStatus = new Map(releaseRows.map((row) => [row.key, row.status]));
       let previewCanvas: Canvas | null = null;
-      for (const { code, dir } of targets) {
+      const renderTargets = target === "all"
+        ? (state.settings.targets ?? [state.settings.platform])
+        : [target ?? state.settings.platform];
+      for (const platformTarget of renderTargets) {
+        assertPlatform(platformTarget);
+        for (const { code, folder } of languageTargets) {
+        const dir = path.join(
+          output_dir,
+          ...(target === "all" ? [platformTarget] : []),
+          ...(folder ? [folder] : []),
+        );
         fs.mkdirSync(dir, { recursive: true });
         // Per-language font override: a locale can render in its own font (e.g.
         // Noto Sans Arabic) while the base uses the global one. Falls back to
         // the global fontFamily when the language has no override.
         const langFont = code ? state.settings.languages?.find((l) => l.code === code)?.font : undefined;
-        const rs: Settings = langFont ? { ...state.settings, fontFamily: langFont } : state.settings;
+        const rs: Settings = {
+          ...state.settings,
+          platform: platformTarget,
+          output: renderOutput,
+          ...(langFont ? { fontFamily: langFont } : {}),
+        };
         if (langFont) await ensureFamily(langFont);
-        const slides = state.slides.map((s) => resolveSlide(s, code));
+        const slides = state.slides.map((s) => resolveSlide(s, code, platformTarget));
         if (mode === "slides" || mode === "both") {
           for (let i = 0; i < slides.length; i++) {
+            const key = releaseAssetKey(platformTarget, outputForSettings(rs).id, code, i);
+            if (changed_only && releaseStatus.get(key) === "unchanged") {
+              skipped.push(key);
+              continue;
+            }
             const c = await renderSlideCanvas(slides, rs, i, k);
             const file = path.join(dir, `slide-${String(i + 1).padStart(2, "0")}.png`);
             fs.writeFileSync(file, pngBuffer(c));
@@ -556,6 +1005,14 @@ export function registerTools(server: McpServer): void {
           }
         }
         if (mode === "strip" || mode === "both") {
+          const groupChanged = slides.some((_, index) => {
+            const key = releaseAssetKey(platformTarget, outputForSettings(rs).id, code, index);
+            return releaseStatus.get(key) !== "unchanged";
+          });
+          if (changed_only && !groupChanged) {
+            skipped.push(`${platformTarget}/${outputForSettings(rs).id}/${code || "source"}/strip`);
+            continue;
+          }
           const full = makeCanvas(1, 1);
           await paintStrip(full as unknown as CanvasLike, slides, rs);
           const c = scaled(full, k);
@@ -565,11 +1022,18 @@ export function registerTools(server: McpServer): void {
           if (!previewCanvas) previewCanvas = c;
         }
       }
+      }
 
       const noteBlock = notes.length ? `\nNotes:\n${notes.map((n) => `- ${n}`).join("\n")}` : "";
       return {
         content: [
-          { type: "text" as const, text: `Rendered:\n${out.map((f) => `- ${f}`).join("\n")}${noteBlock}` },
+          {
+            type: "text" as const,
+            text:
+              `Rendered:\n${out.length ? out.map((f) => `- ${f}`).join("\n") : "- none"}` +
+              `${skipped.length ? `\nSkipped unchanged:\n${skipped.map((key) => `- ${key}`).join("\n")}` : ""}` +
+              `${noteBlock}`,
+          },
           ...(previewCanvas ? [previewOf(previewCanvas)] : []),
         ],
       };
@@ -628,10 +1092,11 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         project_id: z.string().optional().describe("Project id (with slide_index)"),
         slide_index: z.number().int().min(0).optional().describe("0-based slide whose screenshot to sample"),
+        target: z.enum(PLATFORM_IDS as [string, ...string[]]).optional().describe("Platform target; defaults to active"),
         image_path: z.string().optional().describe("Absolute path to an image file (instead of project_id/slide_index)"),
       },
     },
-    async ({ project_id, slide_index, image_path }) => {
+    async ({ project_id, slide_index, target, image_path }) => {
       let img: Slide["image"];
       let source: string;
       if (image_path) {
@@ -643,7 +1108,7 @@ export function registerTools(server: McpServer): void {
         const state = getProject(project_id).state;
         const slide = state.slides[slide_index];
         if (!slide) throw new Error(`Slide index ${slide_index} out of range (project has ${state.slides.length} slides).`);
-        img = slide.image;
+        img = getImageAsset(slide, target ?? state.settings.platform).image ?? null;
         source = `project "${project_id}" slide ${slide_index}`;
         if (!img) throw new Error(`Slide ${slide_index} has no screenshot — attach one with set_screenshots first.`);
       } else {
@@ -728,7 +1193,10 @@ export function registerTools(server: McpServer): void {
           entry.title = s.title;
           entry.subhead = s.subhead ?? "";
           if (s.screenshot_path) {
-            await applyScreenshot(entry, s.screenshot_path, state.settings.platform, `slide ${i + 1} [${t.code}]`, notes);
+            const asset = { image: null, imageDataUrl: null };
+            await applyScreenshot(asset, s.screenshot_path, state.settings.platform, `slide ${i + 1} [${t.code}]`, notes);
+            state.slides[i] = setImageAsset(state.slides[i], state.settings.platform, t.code, asset);
+            state.slides = mirrorSpannedMedia(state.slides, i);
           }
         }
         mergeLanguage(state, t.code, t.name, t.font);

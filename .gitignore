@@ -30,6 +30,12 @@ pnpm-debug.log*
 # Local scratch / private assets — not part of the published app
 misc/
 
+# Local plans and agent-facing technical files
+plans/
+advisor-plans/
+AGENTS.md
+CLAUDE.md
+
 # Local Claude Code settings (keep launch.json, ignore local permissions)
 .claude/settings.local.json
 
