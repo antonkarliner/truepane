@@ -29,6 +29,7 @@ pnpm-debug.log*
 
 # Local scratch / private assets — not part of the published app
 misc/
+docs/marketing/
 
 # Local plans and agent-facing technical files
 plans/

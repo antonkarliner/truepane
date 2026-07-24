@@ -118,7 +118,7 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${siteUrl}/</loc>\n  </url>\n</urlset>\n`,
+        source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${siteUrl}/</loc>\n  </url>\n  <url>\n    <loc>${siteUrl}/guides/create-app-store-screenshots-with-codex-or-claude-code</loc>\n  </url>\n  <url>\n    <loc>${siteUrl}/guides/update-localized-app-store-screenshots-without-uploading</loc>\n  </url>\n</urlset>\n`,
       });
     },
   };

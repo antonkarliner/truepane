@@ -9,6 +9,13 @@ Optional AI helpers send only the text you ask them to process (and, when suppli
 your Groq API key) to the configured Edge Function and model provider. Google Fonts
 are also loaded from Google's CDN unless you use a system or uploaded font.
 
+![Truepane editor: compose slides, tune the background, and prepare store-ready exports](public/truepane-demo.gif)
+
+## Guides
+
+- [Create App Store screenshots with Codex or Claude Code](docs/tutorials/create-app-store-screenshots-with-codex-or-claude-code.md)
+- [Update localized App Store screenshots without uploading them](docs/tutorials/update-localized-app-store-screenshots-without-uploading.md)
+
 ## Why this exists
 
 Most screenshot generators composite a pre-rendered PNG of a phone. This one **draws

@@ -1156,7 +1156,9 @@ button { cursor: pointer; font: inherit; }
 [data-theme="dark"] .bg-preset.active { background: rgba(255,255,255,0.06); }
 
 body[data-route="editor"] > .seo-content,
-body[data-route="editor"] > .site-footer { display: none; }
+body[data-route="editor"] > .site-footer,
+body[data-route="guide"] > .seo-content,
+body[data-route="guide"] > .site-footer { display: none; }
 
 /* Crawlable product content below the welcome screen. */
 .seo-content {
@@ -1305,6 +1307,160 @@ body[data-route="editor"] > .site-footer { display: none; }
 .seo-content details p {
   margin-top: 10px;
 }
+.seo-content__guides {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1.45fr);
+  gap: clamp(48px, 8vw, 120px);
+  margin-top: 72px;
+  padding-top: 68px;
+  border-top: 1px solid rgba(26,22,18,0.14);
+}
+.seo-content__guides h2 {
+  max-width: 360px;
+  font-size: clamp(24px, 2.6vw, 34px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+.seo-content__guide-list {
+  border-top: 1px solid rgba(26,22,18,0.14);
+}
+.seo-content__guide-list > a {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.32fr) minmax(220px, 0.88fr) minmax(240px, 1fr);
+  gap: 24px;
+  padding: 22px 0;
+  border-bottom: 1px solid rgba(26,22,18,0.14);
+  color: inherit;
+  text-decoration: none;
+}
+.seo-content__guide-list > a:hover strong { text-decoration: underline; text-underline-offset: 4px; }
+.seo-content__guide-list span {
+  color: #b5672e;
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.seo-content__guide-list strong {
+  font-size: 15px;
+  line-height: 1.4;
+}
+.seo-content__guide-list p {
+  margin: 0;
+  color: rgba(26,22,18,0.66);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Long-form guides. */
+.guide-page {
+  min-height: 100vh;
+  background: #f3efe7;
+  color: #1a1612;
+  padding: 0 clamp(20px, 4vw, 64px);
+}
+.guide-header,
+.guide-footer {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.guide-header {
+  min-height: 76px;
+  border-bottom: 1px solid rgba(26,22,18,0.14);
+}
+.guide-header__brand {
+  color: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-decoration: none;
+}
+.guide-header nav,
+.guide-footer {
+  display: flex;
+  gap: 24px;
+}
+.guide-header a,
+.guide-footer a {
+  color: inherit;
+  font-size: 13px;
+  text-underline-offset: 4px;
+}
+.guide-article {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 84px 0 96px;
+}
+.guide-eyebrow {
+  margin: 0 0 16px !important;
+  color: #b5672e !important;
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 11px !important;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.guide-article h1 {
+  margin: 0;
+  font-size: clamp(40px, 6vw, 66px);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+.guide-lead {
+  margin: 28px 0 64px !important;
+  font-size: 20px !important;
+  line-height: 1.6 !important;
+  color: rgba(26,22,18,0.72) !important;
+}
+.guide-article h2 {
+  margin: 56px 0 16px;
+  font-size: 25px;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+.guide-article p,
+.guide-article li {
+  font-size: 16px;
+  line-height: 1.72;
+}
+.guide-article p { margin: 0 0 18px; color: rgba(26,22,18,0.78); }
+.guide-article li + li { margin-top: 6px; }
+.guide-article a { color: inherit; text-underline-offset: 4px; }
+.guide-article :not(pre) > code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(26,22,18,0.07);
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 0.88em;
+}
+.guide-article pre {
+  margin: 24px 0 28px;
+  padding: 20px;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: #1a1612;
+  color: #f6f3ec;
+}
+.guide-article pre code {
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.guide-article aside {
+  margin-top: 60px;
+  padding: 22px 24px;
+  border-left: 3px solid #b5672e;
+  background: rgba(181,103,46,0.08);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.guide-footer {
+  padding: 28px 0 42px;
+  border-top: 1px solid rgba(26,22,18,0.14);
+}
 
 .site-footer {
   padding: 0 clamp(28px, 4vw, 64px);
@@ -1440,6 +1596,9 @@ body[data-route="editor"] > .site-footer { display: none; }
 [data-theme="dark"] .seo-content__grid,
 [data-theme="dark"] .seo-content article,
 [data-theme="dark"] .seo-content details,
+[data-theme="dark"] .seo-content__guides,
+[data-theme="dark"] .seo-content__guide-list,
+[data-theme="dark"] .seo-content__guide-list > a,
 [data-theme="dark"] .site-footer__inner { border-color: rgba(255,255,255,0.13); }
 [data-theme="dark"] .seo-content__mcp a,
 [data-theme="dark"] .site-footer__brand { color: #f0ece4 !important; }
@@ -1456,6 +1615,7 @@ body[data-route="editor"] > .site-footer { display: none; }
   /* Use dvh so the layout accounts for the collapsing address bar */
   html, body { min-height: 100%; }
   #root { height: 100dvh; overflow: hidden; }
+  body[data-route="guide"] #root { height: auto; overflow: visible; }
 
   .mobile-layout {
     display: flex;
@@ -1766,10 +1926,15 @@ body[data-route="editor"] > .site-footer { display: none; }
     padding: 52px 18px 64px;
   }
   .seo-content__intro,
-  .seo-content__lower {
+  .seo-content__lower,
+  .seo-content__guides {
     grid-template-columns: 1fr;
     gap: 30px;
   }
+  .seo-content__guide-list > a {
+    grid-template-columns: minmax(110px, 0.35fr) 1fr;
+  }
+  .seo-content__guide-list p { grid-column: 2; }
   .seo-content__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1816,4 +1981,15 @@ body[data-route="editor"] > .site-footer { display: none; }
     flex-wrap: wrap;
     gap: 10px 22px;
   }
+  .seo-content__guide-list > a {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .seo-content__guide-list p { grid-column: auto; }
+  .guide-header { min-height: 64px; }
+  .guide-header nav { gap: 14px; }
+  .guide-article { padding: 56px 0 72px; }
+  .guide-article h1 { font-size: 42px; }
+  .guide-lead { margin-bottom: 48px !important; font-size: 18px !important; }
+  .guide-footer { align-items: flex-start; flex-direction: column; gap: 14px; }
 }
