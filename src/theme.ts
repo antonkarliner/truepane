@@ -4,7 +4,7 @@ const THEME_KEY = "appstore-theme";
 
 function applyFavicon(theme: Theme) {
   const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-  if (link) link.href = theme === "dark" ? "/favicon-dark.svg" : "/favicon-light.svg";
+  if (link) link.href = theme === "dark" ? "/favicon-light.svg" : "/favicon-dark.svg";
 }
 
 export function applyTheme(theme: Theme, persist = true): void {
