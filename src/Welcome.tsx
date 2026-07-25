@@ -37,7 +37,7 @@ function TruepaneBrand() {
               <stop offset="100%" stopColor="#8840b8" />
             </linearGradient>
           </defs>
-          <rect x="4" y="8" width="5.5" height="16" rx="1.6" fill="#f0e4cc" />
+          <rect x="4" y="8" width="5.5" height="16" rx="1.6" fill="var(--brand-left-fill)" />
           <rect x="13.25" y="6" width="5.5" height="20" rx="1.6" fill="url(#welcome-brand-gradient)" />
           <rect x="22.5" y="8" width="5.5" height="16" rx="1.6" fill="#7060a8" />
         </svg>
