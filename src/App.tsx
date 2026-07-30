@@ -25,6 +25,8 @@ import { getImageAsset, serializeMedia, setImageAsset } from "./core/media";
 import type { AppState, Background, ReleaseAssetComparison, Settings, Slide, SlideText } from "./core/types";
 import { applyTheme, initialTheme, type Theme } from "./theme";
 
+const HISTORY_LIMIT = 100;
+
 // ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
@@ -200,7 +202,13 @@ export function App() {
   const suppressStripClick = useRef(false);
   const suppressStripClickTimer = useRef<number | null>(null);
   const [state, setState] = useState<AppState>(() => defaultState());
+  const historyPast = useRef<AppState[]>([]);
+  const historyFuture = useRef<AppState[]>([]);
+  const historyCurrent = useRef(state);
+  const historyReady = useRef(false);
+  const [, refreshHistoryControls] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [desktopPreviewWidth, setDesktopPreviewWidth] = useState(300);
   const [hydrated, setHydrated] = useState(false);
   const [, setFontsReady] = useState(0); // bump to trigger rerender on font load
@@ -235,7 +243,12 @@ export function App() {
     void (async () => {
       const loaded = loadState();
       const slides = await hydrateImages(loaded.slides);
-      setState({ ...loaded, slides });
+      const hydratedState = { ...loaded, slides };
+      historyPast.current = [];
+      historyFuture.current = [];
+      historyCurrent.current = hydratedState;
+      historyReady.current = true;
+      setState(hydratedState);
       setHydrated(true);
       // Preload the curated fonts so previews look right — but skip heavy
       // (CJK) families, which load only when the user actually picks them.
@@ -249,6 +262,15 @@ export function App() {
   useEffect(() => {
     if (!hydrated) return;
     persistState(state);
+  }, [state, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || !historyReady.current || historyCurrent.current === state) return;
+    historyPast.current.push(historyCurrent.current);
+    if (historyPast.current.length > HISTORY_LIMIT) historyPast.current.shift();
+    historyFuture.current = [];
+    historyCurrent.current = state;
+    refreshHistoryControls((version) => version + 1);
   }, [state, hydrated]);
   useEffect(() => {
     localStorage.setItem(BRAND_KIT_STORAGE_KEY, JSON.stringify(brandKits));
@@ -264,6 +286,44 @@ export function App() {
   useEffect(() => {
     setArranging(false);
   }, [selectedIndex, state.settings.platform]);
+
+  const undo = useCallback(() => {
+    const previous = historyPast.current.pop();
+    if (!previous) return;
+    historyFuture.current.push(historyCurrent.current);
+    historyCurrent.current = previous;
+    setState(previous);
+    refreshHistoryControls((version) => version + 1);
+  }, []);
+
+  const redo = useCallback(() => {
+    const next = historyFuture.current.pop();
+    if (!next) return;
+    historyPast.current.push(historyCurrent.current);
+    historyCurrent.current = next;
+    setState(next);
+    refreshHistoryControls((version) => version + 1);
+  }, []);
+
+  const canUndo = historyPast.current.length > 0;
+  const canRedo = historyFuture.current.length > 0;
+
+  useEffect(() => {
+    const handleHistoryShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+      } else if (key === "y" && !event.shiftKey) {
+        event.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handleHistoryShortcut);
+    return () => window.removeEventListener("keydown", handleHistoryShortcut);
+  }, [redo, undo]);
 
   useEffect(() => {
     if (isMobile || !hydrated) return;
@@ -884,6 +944,10 @@ export function App() {
         requestEyedrop={requestEyedrop}
         theme={theme}
         onToggleTheme={toggleTheme}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={undo}
+        onRedo={redo}
         eyedropTarget={eyedropTarget}
         pickColorFromSlide={pickColorFromSlide}
         arranging={arranging}
@@ -909,8 +973,9 @@ export function App() {
   }
 
   return (
-    <div className="app">
+    <div className={"app" + (sidebarCollapsed ? " sidebar-collapsed" : "")}>
       <Sidebar
+        collapsed={sidebarCollapsed}
         state={state}
         selectedIndex={selectedIndex}
         setFont={setFont}
@@ -955,21 +1020,56 @@ export function App() {
       />
       <main className="stage">
         <div className="stage__bar">
-          <div className="stage__label">
-            <span className="badge">
-              {totalSlides} slide{totalSlides === 1 ? "" : "s"}
-            </span>
-            <span className="muted">
-              {platformDim.storeLabel} · {platformDim.W} × {platformDim.H}
-            </span>
-            <span className="muted stage__drag-hint">· Drag canvas to navigate</span>
-            {eyedropTarget && (
-              <span className="muted">· Click a slide to pick a color (Esc to cancel)</span>
-            )}
+          <div className="stage__bar-start">
+            <button
+              className="sidebar-toggle"
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!sidebarCollapsed}
+            >
+              {sidebarCollapsed ? "›" : "‹"}
+            </button>
+            <div className="stage__label">
+              <span className="badge">
+                {totalSlides} slide{totalSlides === 1 ? "" : "s"}
+              </span>
+              <span className="muted">
+                {platformDim.storeLabel} · {platformDim.W} × {platformDim.H}
+              </span>
+              <span className="muted stage__drag-hint">· Drag canvas to navigate</span>
+              {eyedropTarget && (
+                <span className="muted">· Click a slide to pick a color (Esc to cancel)</span>
+              )}
+            </div>
           </div>
-          <button className="ghost" onClick={addSlide}>
-            + Add slide
-          </button>
+          <div className="stage__actions">
+            <div className="history-controls" role="group" aria-label="Edit history">
+              <button
+                className="history-button"
+                disabled={!canUndo}
+                onClick={undo}
+                title="Undo (⌘Z / Ctrl+Z)"
+                aria-label="Undo"
+                aria-keyshortcuts="Control+Z Meta+Z"
+              >
+                ↶
+              </button>
+              <button
+                className="history-button"
+                disabled={!canRedo}
+                onClick={redo}
+                title="Redo (⇧⌘Z / Ctrl+Y)"
+                aria-label="Redo"
+                aria-keyshortcuts="Control+Y Meta+Shift+Z"
+              >
+                ↷
+              </button>
+            </div>
+            <button className="ghost" onClick={addSlide}>
+              + Add slide
+            </button>
+          </div>
         </div>
         <div
           ref={stripRef}

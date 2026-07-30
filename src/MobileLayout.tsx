@@ -2,19 +2,17 @@
 import { useEffect, useRef, useState } from "react";
 import { ColorRow, CompositionControls, Field, ImageDrop, LayoutSlider, Segmented, SlidePreview, TextInput } from "./components";
 import { BrandKitControls } from "./BrandKitControls";
+import { OutputFormatControl } from "./OutputFormatControl";
 import { ReleaseUpdateControls } from "./ReleaseUpdateControls";
 import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimForSettings } from "./core/render";
-import { BUILTIN_OUTPUTS, normalizeOutput } from "./core/output";
 import { accentSuggestions, extractPalette } from "./palette";
 import { aiConfigured, generateBackground, type AiProvider } from "./ai";
 import { BG_PRESETS, FONT_OPTIONS } from "./core/constants";
 import { getImageAsset, setImageAsset } from "./core/media";
-import type { AppState, Background, BackgroundFill, Composition, ReleaseAssetComparison, ShapeKind, Settings, Slide, StoreId } from "./core/types";
+import type { AppState, Background, BackgroundFill, Composition, ReleaseAssetComparison, ShapeKind, Settings, Slide } from "./core/types";
 import type { BrandKit } from "./core/brand-kit";
 
 const DEFAULT_SHAPE_PRESETS = ["#c47c3b", "#1a1612", "#5b6647", "#c4523b", "#5b6cff", "#8a6f4f"];
-const STORE_LABELS: Record<StoreId, string> = { appstore: "App Store", playstore: "Google Play" };
-
 type MobileTab = "content" | "style" | "background" | "export";
 
 export interface MobileLayoutProps {
@@ -40,6 +38,10 @@ export interface MobileLayoutProps {
   requestEyedrop: (apply: (hex: string) => void) => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
   eyedropTarget: ((hex: string) => void) | null;
   pickColorFromSlide: (hex: string) => void;
   arranging: boolean;
@@ -68,6 +70,7 @@ export function MobileLayout(props: MobileLayoutProps) {
     addSlide,
     exportPng, exportStrip, exportZip, exportJson, importJson, exporting,
     requestEyedrop, theme, onToggleTheme,
+    canUndo, canRedo, onUndo, onRedo,
     eyedropTarget, pickColorFromSlide,
     arranging, onToggleArrange,
     onSpanDevice,
@@ -107,6 +110,8 @@ export function MobileLayout(props: MobileLayoutProps) {
   const [showByok, setShowByok] = useState(false);
   const [autoAccent, setAutoAccent] = useState(true);
   const [showPresets, setShowPresets] = useState(false);
+  const [showContentOptions, setShowContentOptions] = useState(false);
+  const [showStyleOptions, setShowStyleOptions] = useState(false);
   const [aiProvider, setAiProvider] = useState<AiProvider>("cerebras");
   const [byokKey, setByokKey] = useState(() => {
     try { return localStorage.getItem("groq-byok") || ""; } catch { return ""; }
@@ -139,34 +144,7 @@ export function MobileLayout(props: MobileLayoutProps) {
   const platform = state.settings.platform || "ios";
   const activeAsset = getImageAsset(selected, platform);
   const previewSlide = { ...selected, image: activeAsset.image ?? null, imageDataUrl: activeAsset.imageDataUrl };
-  const selectPlatform = (value: string) =>
-    updateSettings({
-      platform: value,
-      targets: Array.from(new Set([...(state.settings.targets ?? []), value])),
-      output: state.settings.output && state.settings.output.kind !== "native"
-        ? { ...state.settings.output, frame: value }
-        : undefined,
-    });
-  const stores: StoreId[] = ["appstore", "playstore"];
   const dim = dimForSettings(state.settings);
-  const outputId = state.settings.output?.id ?? platform;
-  const selectOutput = (id: string) => {
-    const builtin = BUILTIN_OUTPUTS.find((output) => output.id === id);
-    if (builtin?.kind === "native") updateSettings({ platform: builtin.frame, output: undefined });
-    else if (builtin) updateSettings({
-      platform: builtin.frame,
-      targets: Array.from(new Set([...(state.settings.targets ?? []), builtin.frame])),
-      output: { ...builtin },
-    });
-    else updateSettings({ output: normalizeOutput({
-      id: "custom",
-      label: "Custom output",
-      width: dim.W,
-      height: dim.H,
-      store: "playstore",
-      frame: platform,
-    }, platform) });
-  };
 
   // Scale slide to fit within available width AND height — whichever is tighter.
   // dim.W/dim.H is the slide aspect ratio (portrait ≈ 0.46 for iPhone).
@@ -282,6 +260,28 @@ export function MobileLayout(props: MobileLayoutProps) {
           <div className="brand__name">Truepane</div>
         </div>
         <span className="badge mobile-header__badge">{selectedIndex + 1} / {totalSlides}</span>
+        <div className="history-controls" role="group" aria-label="Edit history">
+          <button
+            className="history-button"
+            disabled={!canUndo}
+            onClick={onUndo}
+            title="Undo"
+            aria-label="Undo"
+            aria-keyshortcuts="Control+Z Meta+Z"
+          >
+            ↶
+          </button>
+          <button
+            className="history-button"
+            disabled={!canRedo}
+            onClick={onRedo}
+            title="Redo"
+            aria-label="Redo"
+            aria-keyshortcuts="Control+Y Meta+Shift+Z"
+          >
+            ↷
+          </button>
+        </div>
         <button
           className="theme-toggle"
           onClick={onToggleTheme}
@@ -409,7 +409,7 @@ export function MobileLayout(props: MobileLayoutProps) {
                 className={"mobile-tab" + (activeTab === tab ? " active" : "")}
                 onClick={() => setActiveTab(tab)}
               >
-                {tab === "content" ? "Content" : tab === "style" ? "Style" : tab === "background" ? "BG" : "Export"}
+                {tab === "content" ? "Content" : tab === "style" ? "Layout" : tab === "background" ? "BG" : "Export"}
               </button>
             ))}
           </div>
@@ -419,35 +419,7 @@ export function MobileLayout(props: MobileLayoutProps) {
             {/* ── Content tab ── */}
             {activeTab === "content" && (
               <>
-                <div className="mobile-device-section">
-                  <div className="field__label" style={{ marginBottom: 8 }}>Platform</div>
-                  {stores.map((store) => (
-                    <div key={store} className="device-group">
-                      <div className="muted small device-group__label">{STORE_LABELS[store]}</div>
-                      <Segmented
-                        value={PLATFORMS.some((p) => p.id === platform && p.store === store) ? platform : ""}
-                        onChange={selectPlatform}
-                        options={PLATFORMS.filter((p) => p.store === store).map((p) => ({ value: p.id, label: p.label }))}
-                      />
-                    </div>
-                  ))}
-                  <Field label="Output">
-                    <select className="text-input" aria-label="Output format" value={outputId} onChange={(event) => selectOutput(event.target.value)}>
-                      {BUILTIN_OUTPUTS.map((output) => <option key={output.id} value={output.id}>{output.label}</option>)}
-                      <option value="custom">Custom size</option>
-                    </select>
-                  </Field>
-                  {state.settings.output?.kind === "custom" && (
-                    <div className="output-size-grid">
-                      <input aria-label="Custom output width" className="text-input" type="number" min="320" max="8192"
-                        value={state.settings.output.width}
-                        onChange={(event) => updateSettings({ output: normalizeOutput({ ...state.settings.output, width: Number(event.target.value) }, platform) })} />
-                      <input aria-label="Custom output height" className="text-input" type="number" min="320" max="8192"
-                        value={state.settings.output.height}
-                        onChange={(event) => updateSettings({ output: normalizeOutput({ ...state.settings.output, height: Number(event.target.value) }, platform) })} />
-                    </div>
-                  )}
-                </div>
+                <OutputFormatControl settings={state.settings} updateSettings={updateSettings} />
 
                 <Field label={`Screenshot · ${PLATFORMS.find((p) => p.id === platform)?.label ?? platform}`}>
                   <ImageDrop
@@ -459,32 +431,6 @@ export function MobileLayout(props: MobileLayoutProps) {
                       media: setImageAsset(selected, platform, "", { image: null, imageDataUrl: null }).media,
                     })}
                   />
-                  <div className="bulk-import-actions">
-                    <button className="ghost small" onClick={() => bulkDirectoryRef.current?.click()}>Import folder</button>
-                    <button className="ghost small" onClick={() => bulkZipRef.current?.click()}>Import ZIP</button>
-                    <input
-                      ref={bulkDirectoryRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      multiple
-                      style={{ display: "none" }}
-                      {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
-                      onChange={(event) => {
-                        onBulkFiles(Array.from(event.target.files ?? []));
-                        event.target.value = "";
-                      }}
-                    />
-                    <input
-                      ref={bulkZipRef}
-                      type="file"
-                      accept=".zip,application/zip"
-                      style={{ display: "none" }}
-                      onChange={(event) => {
-                        onBulkFiles(Array.from(event.target.files ?? []));
-                        event.target.value = "";
-                      }}
-                    />
-                  </div>
                 </Field>
 
                 <Field label="Title">
@@ -517,22 +463,50 @@ export function MobileLayout(props: MobileLayoutProps) {
                 </div>
 
                 <button className="mobile-add-slide" onClick={addSlide}>+ Add slide</button>
+
+                <button className="disclosure optional-disclosure" onClick={() => setShowContentOptions((shown) => !shown)}>
+                  <span>{showContentOptions ? "▾" : "▸"}</span> Advanced
+                </button>
+                {showContentOptions && (
+                  <div className="control-group">
+                    <div className="field__label">Bulk screenshot import</div>
+                    <div className="field__hint control-group__hint">
+                      Fill slides from an image folder or ZIP; files are assigned in filename order.
+                    </div>
+                    <div className="bulk-import-actions">
+                      <button className="ghost small" onClick={() => bulkDirectoryRef.current?.click()}>Import folder</button>
+                      <button className="ghost small" onClick={() => bulkZipRef.current?.click()}>Import ZIP</button>
+                      <input
+                        ref={bulkDirectoryRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        multiple
+                        style={{ display: "none" }}
+                        {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+                        onChange={(event) => {
+                          onBulkFiles(Array.from(event.target.files ?? []));
+                          event.target.value = "";
+                        }}
+                      />
+                      <input
+                        ref={bulkZipRef}
+                        type="file"
+                        accept=".zip,application/zip"
+                        style={{ display: "none" }}
+                        onChange={(event) => {
+                          onBulkFiles(Array.from(event.target.files ?? []));
+                          event.target.value = "";
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
             {/* ── Style tab ── */}
             {activeTab === "style" && (
               <>
-                <Field label="Brand kits">
-                  <BrandKitControls
-                    kits={brandKits}
-                    onCreate={onCreateBrandKit}
-                    onRename={onRenameBrandKit}
-                    onApply={onApplyBrandKit}
-                    onDelete={onDeleteBrandKit}
-                    onImport={onImportBrandKit}
-                  />
-                </Field>
                 <CompositionControls
                   platform={platform}
                   output={state.settings.output}
@@ -544,6 +518,12 @@ export function MobileLayout(props: MobileLayoutProps) {
                   onToggleArrange={onToggleArrange}
                   onSpanDevice={onSpanDevice}
                   canSpanDevice={selectedIndex < totalSlides - 1}
+                  showAdvanced={showStyleOptions}
+                  advancedDisclosure={(
+                    <button className="disclosure optional-disclosure" onClick={() => setShowStyleOptions((shown) => !shown)}>
+                      <span>{showStyleOptions ? "▾" : "▸"}</span> Advanced
+                    </button>
+                  )}
                 />
                 <Field label={`Title size · ${Math.round((state.settings.titleScale ?? 1) * 100)}%`}>
                   <input
@@ -577,51 +557,66 @@ export function MobileLayout(props: MobileLayoutProps) {
                       </option>
                     )}
                   </select>
-                  <button className="ghost small upload-btn" onClick={() => fontFileRef.current?.click()}>
-                    Upload .ttf / .otf / .woff(2)
-                  </button>
-                  <input
-                    ref={fontFileRef} type="file" accept=".ttf,.otf,.woff,.woff2,font/*"
-                    style={{ display: "none" }}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) onCustomFont(f); e.target.value = ""; }}
-                  />
+                  {showStyleOptions && (
+                    <>
+                      <button className="ghost small upload-btn" onClick={() => fontFileRef.current?.click()}>
+                        Upload .ttf / .otf / .woff(2)
+                      </button>
+                      <input
+                        ref={fontFileRef} type="file" accept=".ttf,.otf,.woff,.woff2,font/*"
+                        style={{ display: "none" }}
+                        onChange={(e) => { const f = e.target.files?.[0]; if (f) onCustomFont(f); e.target.value = ""; }}
+                      />
+                    </>
+                  )}
                 </Field>
 
-                <ColorRow
-                  label="Title color"
-                  value={state.settings.titleColor}
-                  onChange={(v) => updateSettings({ titleColor: v })}
-                  onEyedrop={requestEyedrop}
-                  presets={["#1a1612", "#0a0a0a", "#3b2a1b", "#ffffff", "#f6f3ec", "#c47c3b"]}
-                />
-                <ColorRow
-                  label="Subtitle color"
-                  value={state.settings.subheadColor}
-                  onChange={(v) => updateSettings({ subheadColor: v })}
-                  onEyedrop={requestEyedrop}
-                  presets={["rgba(26,22,18,0.62)", "rgba(26,22,18,0.85)", "rgba(255,255,255,0.72)", "#5b6647", "#c47c3b", "#666666"]}
-                />
-
-                <label className="ai-lock">
-                  <input type="checkbox" checked={hasTextOverride} onChange={toggleTextOverride} />
-                  Override text colors for this slide only
-                </label>
-                {hasTextOverride && (
+                {showStyleOptions && (
                   <>
                     <ColorRow
-                      label="Title (this slide)"
-                      value={selected.titleColor ?? state.settings.titleColor}
-                      onChange={(v) => updateSlide({ titleColor: v })}
+                      label="Title color"
+                      value={state.settings.titleColor}
+                      onChange={(v) => updateSettings({ titleColor: v })}
                       onEyedrop={requestEyedrop}
                       presets={["#1a1612", "#0a0a0a", "#3b2a1b", "#ffffff", "#f6f3ec", "#c47c3b"]}
                     />
                     <ColorRow
-                      label="Subtitle (this slide)"
-                      value={selected.subheadColor ?? state.settings.subheadColor}
-                      onChange={(v) => updateSlide({ subheadColor: v })}
+                      label="Subtitle color"
+                      value={state.settings.subheadColor}
+                      onChange={(v) => updateSettings({ subheadColor: v })}
                       onEyedrop={requestEyedrop}
                       presets={["rgba(26,22,18,0.62)", "rgba(26,22,18,0.85)", "rgba(255,255,255,0.72)", "#5b6647", "#c47c3b", "#666666"]}
                     />
+                    <label className="ai-lock">
+                      <input type="checkbox" checked={hasTextOverride} onChange={toggleTextOverride} />
+                      Override text colors for this slide only
+                    </label>
+                    {hasTextOverride && (
+                      <>
+                        <ColorRow
+                          label="Title (this slide)"
+                          value={selected.titleColor ?? state.settings.titleColor}
+                          onChange={(v) => updateSlide({ titleColor: v })}
+                          onEyedrop={requestEyedrop}
+                        />
+                        <ColorRow
+                          label="Subtitle (this slide)"
+                          value={selected.subheadColor ?? state.settings.subheadColor}
+                          onChange={(v) => updateSlide({ subheadColor: v })}
+                          onEyedrop={requestEyedrop}
+                        />
+                      </>
+                    )}
+                    <Field label="Brand kits">
+                      <BrandKitControls
+                        kits={brandKits}
+                        onCreate={onCreateBrandKit}
+                        onRename={onRenameBrandKit}
+                        onApply={onApplyBrandKit}
+                        onDelete={onDeleteBrandKit}
+                        onImport={onImportBrandKit}
+                      />
+                    </Field>
                   </>
                 )}
               </>

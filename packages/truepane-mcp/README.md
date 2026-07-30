@@ -25,7 +25,8 @@ translation are its own judgment calls.
   keep their screenshot, position, scale, and rotation linked.
 - Save and apply portable brand kits without carrying screenshots or project data.
 - Render native store sizes, the 1024×500 Google Play feature graphic, or bounded
-  custom dimensions.
+  custom dimensions. Custom width and height are validated together and rejected
+  rather than silently replaced or clamped.
 - Run the same advisory release preflight as the browser editor.
 - Save a release baseline, compare added/changed/unchanged/removed assets, and
   render only changed assets.

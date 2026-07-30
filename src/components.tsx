@@ -252,6 +252,9 @@ export function CompositionControls({
   onToggleArrange,
   onSpanDevice,
   canSpanDevice,
+  showAdvanced = true,
+  advancedDisclosure,
+  showTextAlignment = true,
 }: {
   platform: string;
   output?: OutputSpec;
@@ -263,6 +266,9 @@ export function CompositionControls({
   onToggleArrange: () => void;
   onSpanDevice: () => void;
   canSpanDevice: boolean;
+  showAdvanced?: boolean;
+  advancedDisclosure?: ReactNode;
+  showTextAlignment?: boolean;
 }) {
   const normalized = normalizeComposition(composition);
   const resolved = resolveComposition(normalized, getRenderFrame(platform, output));
@@ -273,7 +279,7 @@ export function CompositionControls({
 
   return (
     <div className="composition-controls">
-      <Field label="Layout preset">
+      <Field label="Layout preset" hint="Choose a starting arrangement for the text and device.">
         <select
           className="text-input"
           aria-label="Composition preset"
@@ -285,44 +291,75 @@ export function CompositionControls({
           ))}
         </select>
       </Field>
-      <button className={"ghost small arrange-btn" + (arranging ? " active" : "")} onClick={onToggleArrange}>
-        {arranging ? "Done arranging" : "Arrange on canvas"}
-      </button>
-      <button className="ghost small" disabled={!canSpanDevice} onClick={onSpanDevice}>
-        Span device across next slide
-      </button>
-      <Field label={`Device horizontal · ${Math.round(resolved.device.x * 100)}%`}>
-        <input className="slider" type="range" min="-0.4" max="1.4" step="0.005"
-          value={resolved.device.x} onChange={(e) => patchDevice({ x: Number(e.target.value) })} />
-      </Field>
-      <Field label={`Device vertical · ${Math.round(resolved.device.y * 100)}%`}>
-        <input className="slider" type="range" min="-0.4" max="1.4" step="0.005"
-          value={resolved.device.y} onChange={(e) => patchDevice({ y: Number(e.target.value) })} />
-      </Field>
-      <Field label={`Device size · ${Math.round(resolved.device.scale * 100)}%`}>
-        <input className="slider" type="range" min="0.4" max="1.6" step="0.01"
-          value={resolved.device.scale} onChange={(e) => patchDevice({ scale: Number(e.target.value) })} />
-      </Field>
-      <Field label={`Device angle · ${resolved.device.rotation.toFixed(0)}°`}>
-        <input className="slider" type="range" min="-20" max="20" step="1"
-          value={resolved.device.rotation} onChange={(e) => patchDevice({ rotation: Number(e.target.value) })} />
-      </Field>
-      <Field label="Text alignment">
-        <Segmented
-          value={resolved.text.align}
-          onChange={(value) => patchText({ align: value as TextAlign })}
-          options={[
-            { value: "left", label: "Left" },
-            { value: "center", label: "Center" },
-            { value: "right", label: "Right" },
-          ]}
-        />
-      </Field>
-      <button className="ghost small" onClick={() => onChange({ preset: normalized.preset })}>Reset preset</button>
-      <label className="ai-lock">
-        <input type="checkbox" checked={hasOverride} onChange={onToggleOverride} />
-        Override composition for this slide only
-      </label>
+      {showTextAlignment && (
+        <Field label="Text alignment">
+          <Segmented
+            value={resolved.text.align}
+            onChange={(value) => patchText({ align: value as TextAlign })}
+            options={[
+              { value: "left", label: "Left" },
+              { value: "center", label: "Center" },
+              { value: "right", label: "Right" },
+            ]}
+          />
+        </Field>
+      )}
+      {advancedDisclosure}
+      {showAdvanced && (
+        <>
+          <div className="control-group">
+            <div className="field__label">Canvas placement</div>
+            <div className="field__hint control-group__hint">
+              Drag the device directly on the preview for quick visual positioning.
+            </div>
+            <button className={"ghost small arrange-btn" + (arranging ? " active" : "")} onClick={onToggleArrange}>
+              {arranging ? "Done arranging" : "Arrange on canvas"}
+            </button>
+          </div>
+          <div className="control-group">
+            <div className="field__label">Cross-slide device</div>
+            <div className="field__hint control-group__hint">
+              Continue this device across the next slide to create one connected composition.
+            </div>
+            <button className="ghost small" disabled={!canSpanDevice} onClick={onSpanDevice}>
+              Span device across next slide
+            </button>
+          </div>
+          <div className="control-group">
+            <div className="field__label">Precise placement</div>
+            <div className="field__hint control-group__hint">
+              Fine-tune the device position, scale, and rotation numerically.
+            </div>
+            <Field label={`Horizontal · ${Math.round(resolved.device.x * 100)}%`}>
+              <input className="slider" type="range" min="-0.4" max="1.4" step="0.005"
+                value={resolved.device.x} onChange={(e) => patchDevice({ x: Number(e.target.value) })} />
+            </Field>
+            <Field label={`Vertical · ${Math.round(resolved.device.y * 100)}%`}>
+              <input className="slider" type="range" min="-0.4" max="1.4" step="0.005"
+                value={resolved.device.y} onChange={(e) => patchDevice({ y: Number(e.target.value) })} />
+            </Field>
+            <Field label={`Size · ${Math.round(resolved.device.scale * 100)}%`}>
+              <input className="slider" type="range" min="0.4" max="1.6" step="0.01"
+                value={resolved.device.scale} onChange={(e) => patchDevice({ scale: Number(e.target.value) })} />
+            </Field>
+            <Field label={`Angle · ${resolved.device.rotation.toFixed(0)}°`}>
+              <input className="slider" type="range" min="-20" max="20" step="1"
+                value={resolved.device.rotation} onChange={(e) => patchDevice({ rotation: Number(e.target.value) })} />
+            </Field>
+          </div>
+          <div className="control-group">
+            <div className="field__label">Composition scope</div>
+            <div className="field__hint control-group__hint">
+              Reset manual adjustments or decide whether this composition applies only to the selected slide.
+            </div>
+            <button className="ghost small" onClick={() => onChange({ preset: normalized.preset })}>Reset preset</button>
+            <label className="ai-lock">
+              <input type="checkbox" checked={hasOverride} onChange={onToggleOverride} />
+              Override composition for this slide only
+            </label>
+          </div>
+        </>
+      )}
     </div>
   );
 }

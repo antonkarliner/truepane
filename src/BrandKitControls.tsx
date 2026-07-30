@@ -71,6 +71,9 @@ export function BrandKitControls({
         <input type="checkbox" checked={clearOverrides} onChange={(event) => setClearOverrides(event.target.checked)} />
         Clear per-slide overrides
       </label>
+      <div className="field__hint">
+        Before applying the kit, remove slide-specific background, text-color, and composition settings so every slide inherits the kit consistently.
+      </div>
       <div className="brand-kit-actions">
         <button className="ghost small" disabled={!selected} onClick={exportKit}>Export file</button>
         <button className="ghost small" onClick={() => inputRef.current?.click()}>Import file</button>

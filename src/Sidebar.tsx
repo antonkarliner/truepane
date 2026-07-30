@@ -2,15 +2,16 @@
 import { useRef, useState } from "react";
 import { ColorRow, CompositionControls, Field, ImageDrop, LayoutSlider, Segmented, TextInput } from "./components";
 import { BrandKitControls } from "./BrandKitControls";
+import { OutputFormatControl } from "./OutputFormatControl";
 import { ReleaseUpdateControls } from "./ReleaseUpdateControls";
-import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimForSettings } from "./core/render";
-import { BUILTIN_OUTPUTS, normalizeOutput } from "./core/output";
+import { FILL_OPTIONS, getRenderFrame, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES } from "./core/render";
+import { normalizeComposition, resolveComposition } from "./core/composition";
 import { accentSuggestions, extractPalette } from "./palette";
 import { getImageAsset, setImageAsset } from "./core/media";
 
 const DEFAULT_SHAPE_PRESETS = ["#c47c3b", "#1a1612", "#5b6647", "#c4523b", "#5b6cff", "#8a6f4f"];
 import { aiConfigured, generateBackground, translateConfigured, translateSlides, type AiProvider } from "./ai";
-import { BG_PRESETS, FONT_OPTIONS, TRANSLATE_LANGUAGES } from "./core/constants";
+import { FONT_OPTIONS, TRANSLATE_LANGUAGES } from "./core/constants";
 import type {
   AppState,
   Background,
@@ -21,17 +22,15 @@ import type {
   Settings,
   Slide,
   SlideText,
-  StoreId,
   ReleaseAssetComparison,
+  TextAlign,
 } from "./core/types";
 import type { BrandKit } from "./core/brand-kit";
 
-const STORE_LABELS: Record<StoreId, string> = {
-  appstore: "App Store",
-  playstore: "Google Play",
-};
+type SidebarTab = "content" | "background" | "layout" | "export";
 
 interface SidebarProps {
+  collapsed: boolean;
   state: AppState;
   selectedIndex: number;
   setFont: (family: string) => void;
@@ -77,6 +76,7 @@ interface SidebarProps {
 
 export function Sidebar(props: SidebarProps) {
   const {
+    collapsed,
     state,
     selectedIndex,
     setFont,
@@ -132,7 +132,12 @@ export function Sidebar(props: SidebarProps) {
   const [lockStyle, setLockStyle] = useState(false);
   const [showByok, setShowByok] = useState(false);
   const [autoAccent, setAutoAccent] = useState(true);
-  const [showPresets, setShowPresets] = useState(false);
+  const [activeTab, setActiveTab] = useState<SidebarTab>("content");
+  const [showContentOptions, setShowContentOptions] = useState(false);
+  const [showTextColors, setShowTextColors] = useState(false);
+  const [showLayoutOptions, setShowLayoutOptions] = useState(false);
+  const [showBackgroundOptions, setShowBackgroundOptions] = useState(false);
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const [aiProvider, setAiProvider] = useState<AiProvider>("cerebras");
   const [byokKey, setByokKey] = useState(() => {
     try {
@@ -299,42 +304,14 @@ export function Sidebar(props: SidebarProps) {
     else updateSlide({ composition: { ...(state.settings.composition ?? { preset: "classic" }) } });
   };
   const slidesCount = state.slides.length;
+  const targetCount = state.settings.targets?.length ?? 1;
   const platform = state.settings.platform || "ios";
+  const normalizedComposition = normalizeComposition(composition);
+  const resolvedComposition = resolveComposition(
+    normalizedComposition,
+    getRenderFrame(platform, state.settings.output),
+  );
   const activeAsset = getImageAsset(selected, platform, activeLang);
-  const selectPlatform = (value: string) =>
-    updateSettings({
-      platform: value,
-      targets: Array.from(new Set([...(state.settings.targets ?? []), value])),
-      output: state.settings.output && state.settings.output.kind !== "native"
-        ? { ...state.settings.output, frame: value }
-        : undefined,
-    });
-  const dim = dimForSettings(state.settings);
-  const outputId = state.settings.output?.id ?? platform;
-  const selectOutput = (id: string) => {
-    const builtin = BUILTIN_OUTPUTS.find((output) => output.id === id);
-    if (builtin?.kind === "native") {
-      updateSettings({ platform: builtin.frame, output: undefined });
-    } else if (builtin) {
-      updateSettings({
-        platform: builtin.frame,
-        targets: Array.from(new Set([...(state.settings.targets ?? []), builtin.frame])),
-        output: { ...builtin },
-      });
-    } else {
-      updateSettings({
-        output: normalizeOutput({
-          id: "custom",
-          label: "Custom output",
-          width: dim.W,
-          height: dim.H,
-          store: state.settings.output?.store ?? "playstore",
-          frame: platform,
-        }, platform),
-      });
-    }
-  };
-  const stores: StoreId[] = ["appstore", "playstore"];
   const shapeMeta = SHAPE_FAMILIES.find((f) => f.id === bg.shape);
   const isGradient = bg.fill !== "solid";
   const hasShape = bg.shape !== "none";
@@ -346,11 +323,9 @@ export function Sidebar(props: SidebarProps) {
     if (p) handleBgUpdate({ color: p.color, accent: p.accent });
   };
   const randomizeSeed = () => handleBgUpdate({ seed: Math.floor(Math.random() * 1e9) });
-  const jumpTo = (id: string) => {
-    const target = document.getElementById(id);
-    const sidebar = target?.closest<HTMLElement>(".sidebar");
-    if (!target || !sidebar) return;
-    sidebar.scrollTo({ top: target.offsetTop - 51, behavior: "smooth" });
+  const selectTab = (tab: SidebarTab) => {
+    setActiveTab(tab);
+    document.querySelector<HTMLElement>(".sidebar")?.scrollTo({ top: 0 });
   };
 
   // Shape-color preset swatches: harmonized to the background when auto-adjust
@@ -358,7 +333,7 @@ export function Sidebar(props: SidebarProps) {
   const shapePresets = autoAccent ? accentSuggestions(bg.color) : DEFAULT_SHAPE_PRESETS;
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" aria-hidden={collapsed}>
       <header className="sidebar__head">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div className="brand">
@@ -405,69 +380,40 @@ export function Sidebar(props: SidebarProps) {
       </header>
 
       <nav className="sidebar__nav" aria-label="Editor sections">
-        <button onClick={() => jumpTo("sidebar-setup")}>Setup</button>
-        <button onClick={() => jumpTo("sidebar-slide")}>Slide</button>
-        <button onClick={() => jumpTo("sidebar-background")}>Background</button>
-        <button onClick={() => jumpTo("sidebar-export")}>Export</button>
+        {([
+          ["content", "Content"],
+          ["background", "BG"],
+          ["layout", "Layout"],
+          ["export", "Export"],
+        ] as const).map(([tab, label]) => (
+          <button
+            key={tab}
+            className={activeTab === tab ? "active" : ""}
+            aria-pressed={activeTab === tab}
+            onClick={() => selectTab(tab)}
+          >
+            {label}
+          </button>
+        ))}
       </nav>
 
-      <section className="panel" id="sidebar-setup">
-        <div className="panel__title">Device</div>
-        {stores.map((store) => (
-          <div key={store} className="device-group">
-            <div className="muted small device-group__label">{STORE_LABELS[store]}</div>
-            <Segmented
-              value={PLATFORMS.some((p) => p.id === platform && p.store === store) ? platform : ""}
-              onChange={selectPlatform}
-              options={PLATFORMS.filter((p) => p.store === store).map((p) => ({
-                value: p.id,
-                label: p.label,
-              }))}
-            />
-          </div>
-        ))}
-        <div className="muted small" style={{ marginTop: 8 }}>
-          {dim.storeLabel} · {dim.W} × {dim.H}
-        </div>
-        <Field label="Output">
-          <select className="text-input" aria-label="Output format" value={outputId} onChange={(event) => selectOutput(event.target.value)}>
-            {BUILTIN_OUTPUTS.map((output) => <option key={output.id} value={output.id}>{output.label}</option>)}
-            <option value="custom">Custom size</option>
-          </select>
-        </Field>
-        {state.settings.output?.kind === "custom" && (
-          <div className="output-size-grid">
-            <Field label="Width">
-              <input className="text-input" type="number" min="320" max="8192" value={state.settings.output.width}
-                onChange={(event) => updateSettings({ output: normalizeOutput({ ...state.settings.output, width: Number(event.target.value) }, platform) })} />
-            </Field>
-            <Field label="Height">
-              <input className="text-input" type="number" min="320" max="8192" value={state.settings.output.height}
-                onChange={(event) => updateSettings({ output: normalizeOutput({ ...state.settings.output, height: Number(event.target.value) }, platform) })} />
-            </Field>
-          </div>
-        )}
-      </section>
-
-      <section className="panel" id="sidebar-brand-kits">
-        <div className="panel__title">Brand kits</div>
-        <BrandKitControls
-          kits={brandKits}
-          onCreate={onCreateBrandKit}
-          onRename={onRenameBrandKit}
-          onApply={onApplyBrandKit}
-          onDelete={onDeleteBrandKit}
-          onImport={onImportBrandKit}
-        />
-      </section>
-
-      <section className="panel" id="sidebar-slide">
+      <section className="panel" id="sidebar-slide" hidden={activeTab !== "content"}>
         <div className="panel__title">
           Selected slide
           <span className="panel__count">
             {String(selectedIndex + 1).padStart(2, "0")} / {String(slidesCount).padStart(2, "0")}
           </span>
         </div>
+
+        <OutputFormatControl settings={state.settings} updateSettings={updateSettings} />
+
+        <Field label={`Screenshot · ${PLATFORMS.find((p) => p.id === platform)?.label ?? platform}`}>
+          <ImageDrop
+            image={activeAsset.imageDataUrl ? { dataUrl: activeAsset.imageDataUrl } : null}
+            onImage={setSlideImage}
+            onClear={clearSlideImage}
+          />
+        </Field>
 
         {languages.length > 0 && (
           <Field label="Editing language" hint={activeLang ? "Source text shown below each field." : undefined}>
@@ -488,18 +434,6 @@ export function Sidebar(props: SidebarProps) {
         >
           <TextInput value={editTitle} onChange={onTitleChange} placeholder="Your headline here" />
         </Field>
-        <Field label={`Title size · ${Math.round((state.settings.titleScale ?? 1) * 100)}%`}>
-          <input
-            className="slider"
-            type="range"
-            aria-label="Title size"
-            min="0.5"
-            max="1.5"
-            step="0.05"
-            value={state.settings.titleScale ?? 1}
-            onChange={(e) => updateSettings({ titleScale: parseFloat(e.target.value) })}
-          />
-        </Field>
         <Field
           label={activeLang ? `Subtitle · ${langName(activeLang)}` : "Subtitle"}
           hint={activeLang ? `Source: ${selected.subhead || "—"}` : "Wraps to 2 lines automatically."}
@@ -511,150 +445,6 @@ export function Sidebar(props: SidebarProps) {
             placeholder="A short, benefit-driven subtitle."
           />
         </Field>
-        <Field label={`Subtitle size · ${Math.round((state.settings.subtitleScale ?? 1) * 100)}%`}>
-          <input
-            className="slider"
-            type="range"
-            aria-label="Subtitle size"
-            min="0.5"
-            max="1.5"
-            step="0.05"
-            value={state.settings.subtitleScale ?? 1}
-            onChange={(e) => updateSettings({ subtitleScale: parseFloat(e.target.value) })}
-          />
-        </Field>
-
-        <Field label="Font family">
-          <select
-            className="text-input"
-            aria-label="Font family"
-            value={state.settings.fontFamily}
-            onChange={(e) => setFont(e.target.value)}
-          >
-            {FONT_OPTIONS.map((f) => (
-              <option
-                key={f.id}
-                value={f.id}
-                style={{ fontFamily: f.google ? `"${f.id}", sans-serif` : `${f.id}, sans-serif` }}
-              >
-                {f.label}
-              </option>
-            ))}
-            {state.settings.customFont && (
-              <option
-                value={state.settings.customFont.name}
-                style={{ fontFamily: `"${state.settings.customFont.name}"` }}
-              >
-                {state.settings.customFont.name} (custom)
-              </option>
-            )}
-          </select>
-          <button className="ghost small upload-btn" onClick={() => fontFileRef.current?.click()}>
-            Upload .ttf / .otf / .woff(2)
-          </button>
-          <input
-            ref={fontFileRef}
-            type="file"
-            accept=".ttf,.otf,.woff,.woff2,font/*"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onCustomFont(f);
-              e.target.value = "";
-            }}
-          />
-        </Field>
-
-        <ColorRow
-          label="Title color"
-          value={state.settings.titleColor}
-          onChange={(v) => updateSettings({ titleColor: v })}
-          onEyedrop={requestEyedrop}
-          presets={["#1a1612", "#0a0a0a", "#3b2a1b", "#ffffff", "#f6f3ec", "#c47c3b"]}
-        />
-        <ColorRow
-          label="Subtitle color"
-          value={state.settings.subheadColor}
-          onChange={(v) => updateSettings({ subheadColor: v })}
-          onEyedrop={requestEyedrop}
-          presets={[
-            "rgba(26,22,18,0.62)",
-            "rgba(26,22,18,0.85)",
-            "rgba(255,255,255,0.72)",
-            "#5b6647",
-            "#c47c3b",
-            "#666666",
-          ]}
-        />
-
-        <label className="ai-lock">
-          <input type="checkbox" checked={hasTextOverride} onChange={toggleTextOverride} />
-          Override for this slide only
-        </label>
-        {hasTextOverride && (
-          <>
-            <ColorRow
-              label="Title (this slide)"
-              value={selected.titleColor ?? state.settings.titleColor}
-              onChange={(v) => updateSlide({ titleColor: v })}
-              onEyedrop={requestEyedrop}
-              presets={["#1a1612", "#0a0a0a", "#3b2a1b", "#ffffff", "#f6f3ec", "#c47c3b"]}
-            />
-            <ColorRow
-              label="Subtitle (this slide)"
-              value={selected.subheadColor ?? state.settings.subheadColor}
-              onChange={(v) => updateSlide({ subheadColor: v })}
-              onEyedrop={requestEyedrop}
-              presets={[
-                "rgba(26,22,18,0.62)",
-                "rgba(26,22,18,0.85)",
-                "rgba(255,255,255,0.72)",
-                "#5b6647",
-                "#c47c3b",
-                "#666666",
-              ]}
-            />
-          </>
-        )}
-
-        <Field label={`Screenshot · ${PLATFORMS.find((p) => p.id === platform)?.label ?? platform}`}>
-          <ImageDrop
-            image={activeAsset.imageDataUrl ? { dataUrl: activeAsset.imageDataUrl } : null}
-            onImage={setSlideImage}
-            onClear={clearSlideImage}
-          />
-          <div className="bulk-import-actions">
-            <button className="ghost small" onClick={() => bulkDirectoryRef.current?.click()}>
-              Import folder
-            </button>
-            <button className="ghost small" onClick={() => bulkZipRef.current?.click()}>
-              Import ZIP
-            </button>
-            <input
-              ref={bulkDirectoryRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              multiple
-              style={{ display: "none" }}
-              {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
-              onChange={(event) => {
-                onBulkFiles(Array.from(event.target.files ?? []));
-                event.target.value = "";
-              }}
-            />
-            <input
-              ref={bulkZipRef}
-              type="file"
-              accept=".zip,application/zip"
-              style={{ display: "none" }}
-              onChange={(event) => {
-                onBulkFiles(Array.from(event.target.files ?? []));
-                event.target.value = "";
-              }}
-            />
-          </div>
-        </Field>
-
         <div className="row-actions">
           <button className="ghost small" disabled={selectedIndex === 0} onClick={() => moveSelected(-1)}>
             ← Move
@@ -670,10 +460,15 @@ export function Sidebar(props: SidebarProps) {
             Delete
           </button>
         </div>
+
       </section>
 
-      {translateConfigured && (
-        <section className="panel">
+      {translateConfigured && showContentOptions && (
+        <section className="panel content-advanced-panel">
+          <div className="field__label">Localization</div>
+          <div className="field__hint control-group__hint">
+            Translate slide titles and subtitles while keeping the source copy available for reference.
+          </div>
           <button className="disclosure" onClick={() => setShowTranslate((s) => !s)}>
             <span>{showTranslate ? "▾" : "▸"}</span> Translate
             {languages.length > 0 && <span className="disclosure__count">{languages.length}</span>}
@@ -786,8 +581,8 @@ export function Sidebar(props: SidebarProps) {
         </section>
       )}
 
-      <section className="panel" id="sidebar-composition">
-        <div className="panel__title">Composition</div>
+      <section className="panel" id="sidebar-composition" hidden={activeTab !== "layout"}>
+        <div className="panel__title">Device layout</div>
         <CompositionControls
           platform={platform}
           output={state.settings.output}
@@ -799,67 +594,210 @@ export function Sidebar(props: SidebarProps) {
           onToggleArrange={onToggleArrange}
           onSpanDevice={onSpanDevice}
           canSpanDevice={selectedIndex < slidesCount - 1}
+          showAdvanced={showLayoutOptions}
+          showTextAlignment={false}
+          advancedDisclosure={(
+            <button className="disclosure optional-disclosure" onClick={() => setShowLayoutOptions((shown) => !shown)}>
+              <span>{showLayoutOptions ? "▾" : "▸"}</span> Advanced
+            </button>
+          )}
         />
+        {showLayoutOptions && (
+          <div className="optional-subsection">
+            <div className="field__label">Brand kits</div>
+            <div className="field__hint">
+              Save and reuse typography, colors, background, and composition across projects.
+            </div>
+            <BrandKitControls
+              kits={brandKits}
+              onCreate={onCreateBrandKit}
+              onRename={onRenameBrandKit}
+              onApply={onApplyBrandKit}
+              onDelete={onDeleteBrandKit}
+              onImport={onImportBrandKit}
+            />
+          </div>
+        )}
       </section>
 
-      <section className="panel" id="sidebar-background">
+      <section className="panel" id="sidebar-typography" hidden={activeTab !== "content"}>
+        <div className="panel__title">Typography</div>
+        <Field label="Font family" hint="Applied to both the title and subtitle.">
+          <select
+            className="text-input"
+            aria-label="Font family"
+            value={state.settings.fontFamily}
+            onChange={(e) => setFont(e.target.value)}
+          >
+            {FONT_OPTIONS.map((font) => (
+              <option
+                key={font.id}
+                value={font.id}
+                style={{ fontFamily: font.google ? `"${font.id}", sans-serif` : `${font.id}, sans-serif` }}
+              >
+                {font.label}
+              </option>
+            ))}
+            {state.settings.customFont && (
+              <option
+                value={state.settings.customFont.name}
+                style={{ fontFamily: `"${state.settings.customFont.name}"` }}
+              >
+                {state.settings.customFont.name} (custom)
+              </option>
+            )}
+          </select>
+          <button className="ghost small upload-btn" onClick={() => fontFileRef.current?.click()}>
+            Upload custom font
+          </button>
+          <input
+            ref={fontFileRef}
+            type="file"
+            accept=".ttf,.otf,.woff,.woff2,font/*"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onCustomFont(file);
+              e.target.value = "";
+            }}
+          />
+        </Field>
+        <Field label="Text alignment">
+          <Segmented
+            value={resolvedComposition.text.align}
+            onChange={(value) => updateComposition({
+              ...normalizedComposition,
+              text: { ...normalizedComposition.text, align: value as TextAlign },
+            })}
+            options={[
+              { value: "left", label: "Left" },
+              { value: "center", label: "Center" },
+              { value: "right", label: "Right" },
+            ]}
+          />
+        </Field>
+        <Field label={`Title size · ${Math.round((state.settings.titleScale ?? 1) * 100)}%`}>
+          <input
+            className="slider"
+            type="range"
+            aria-label="Title size"
+            min="0.5"
+            max="1.5"
+            step="0.05"
+            value={state.settings.titleScale ?? 1}
+            onChange={(e) => updateSettings({ titleScale: parseFloat(e.target.value) })}
+          />
+        </Field>
+        <Field label={`Subtitle size · ${Math.round((state.settings.subtitleScale ?? 1) * 100)}%`}>
+          <input
+            className="slider"
+            type="range"
+            aria-label="Subtitle size"
+            min="0.5"
+            max="1.5"
+            step="0.05"
+            value={state.settings.subtitleScale ?? 1}
+            onChange={(e) => updateSettings({ subtitleScale: parseFloat(e.target.value) })}
+          />
+        </Field>
+
+        <button className="disclosure field-disclosure" onClick={() => setShowTextColors((shown) => !shown)}>
+          <span>{showTextColors ? "▾" : "▸"}</span> Text colors
+        </button>
+        <div className="field__hint control-group__hint">
+          Set global title and subtitle colors, or override them for only the selected slide.
+        </div>
+        {showTextColors && (
+          <div className="optional-controls compact-controls">
+            <ColorRow
+              label="Title color"
+              value={state.settings.titleColor}
+              onChange={(value) => updateSettings({ titleColor: value })}
+              onEyedrop={requestEyedrop}
+              presets={["#1a1612", "#0a0a0a", "#3b2a1b", "#ffffff", "#f6f3ec", "#c47c3b"]}
+            />
+            <ColorRow
+              label="Subtitle color"
+              value={state.settings.subheadColor}
+              onChange={(value) => updateSettings({ subheadColor: value })}
+              onEyedrop={requestEyedrop}
+              presets={["rgba(26,22,18,0.62)", "rgba(26,22,18,0.85)", "rgba(255,255,255,0.72)", "#5b6647", "#c47c3b", "#666666"]}
+            />
+            <label className="ai-lock">
+              <input type="checkbox" checked={hasTextOverride} onChange={toggleTextOverride} />
+              Override text colors for this slide only
+            </label>
+            {hasTextOverride && (
+              <>
+                <ColorRow
+                  label="Title (this slide)"
+                  value={selected.titleColor ?? state.settings.titleColor}
+                  onChange={(value) => updateSlide({ titleColor: value })}
+                  onEyedrop={requestEyedrop}
+                />
+                <ColorRow
+                  label="Subtitle (this slide)"
+                  value={selected.subheadColor ?? state.settings.subheadColor}
+                  onChange={(value) => updateSlide({ subheadColor: value })}
+                  onEyedrop={requestEyedrop}
+                />
+              </>
+            )}
+          </div>
+        )}
+
+        <button className="disclosure optional-disclosure" onClick={() => setShowContentOptions((shown) => !shown)}>
+          <span>{showContentOptions ? "▾" : "▸"}</span> Advanced
+        </button>
+        {showContentOptions && (
+          <div className="optional-controls">
+            <div className="control-group">
+              <div className="field__label">Bulk screenshot import</div>
+              <div className="field__hint control-group__hint">
+                Fill slides from an image folder or ZIP; files are assigned in filename order.
+              </div>
+              <div className="bulk-import-actions">
+                <button className="ghost small" onClick={() => bulkDirectoryRef.current?.click()}>
+                  Import folder
+                </button>
+                <button className="ghost small" onClick={() => bulkZipRef.current?.click()}>
+                  Import ZIP
+                </button>
+                <input
+                  ref={bulkDirectoryRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                  style={{ display: "none" }}
+                  {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+                  onChange={(event) => {
+                    onBulkFiles(Array.from(event.target.files ?? []));
+                    event.target.value = "";
+                  }}
+                />
+                <input
+                  ref={bulkZipRef}
+                  type="file"
+                  accept=".zip,application/zip"
+                  style={{ display: "none" }}
+                  onChange={(event) => {
+                    onBulkFiles(Array.from(event.target.files ?? []));
+                    event.target.value = "";
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="panel" id="sidebar-background" hidden={activeTab !== "background"}>
         <div className="panel__title">Background</div>
 
         <label className="ai-lock">
           <input type="checkbox" checked={hasSlideOverride} onChange={toggleSlideOverride} />
           Override for this slide only
         </label>
-
-        {aiConfigured && (
-          <Field label="Generate with AI" hint="Describe a vibe; AI picks a style + palette.">
-            <Segmented
-              value={aiProvider}
-              onChange={(v) => setAiProvider(v as AiProvider)}
-              options={[
-                { value: "cerebras", label: "Cerebras 120B" },
-                { value: "groq", label: "Groq 70B" },
-              ]}
-            />
-            <TextInput value={aiPrompt} onChange={setAiPrompt} placeholder="e.g. calm, warm, organic" />
-            <button
-              className="ghost small upload-btn"
-              disabled={aiBusy || !aiPrompt.trim()}
-              onClick={runAiPrompt}
-            >
-              {aiBusy ? "Generating…" : "Generate"}
-            </button>
-            <label className="ai-lock">
-              <input
-                type="checkbox"
-                checked={lockStyle}
-                onChange={(e) => setLockStyle(e.target.checked)}
-              />
-              Lock style (recolor only)
-            </label>
-            {aiProvider === "groq" && (
-              <>
-                <button className="ghost small upload-btn" onClick={() => setShowByok((s) => !s)}>
-                  {showByok ? "Hide key field" : "Use my own Groq key"}
-                </button>
-                {showByok && (
-                  <input
-                    className="text-input"
-                    type="password"
-                    placeholder="gsk_… (stored in this browser only)"
-                    value={byokKey}
-                    onChange={(e) => setByok(e.target.value)}
-                  />
-                )}
-              </>
-            )}
-            {aiError && (
-              <div className="field__hint" style={{ color: "#c4523b" }}>
-                {aiError}
-              </div>
-            )}
-            {aiNote && !aiError && <div className="ai-note">"{aiNote}"</div>}
-          </Field>
-        )}
 
         {/* Fill layer */}
         <Field label="Fill">
@@ -1017,49 +955,80 @@ export function Sidebar(props: SidebarProps) {
           </>
         )}
 
-        <button
-          className="ghost small upload-btn match-btn"
-          disabled={!activeAsset.image}
-          onClick={matchPalette}
-        >
-          Match screenshot palette
+        <button className="disclosure optional-disclosure" onClick={() => setShowBackgroundOptions((shown) => !shown)}>
+          <span>{showBackgroundOptions ? "▾" : "▸"}</span> Advanced
         </button>
-
-        <button className="disclosure" onClick={() => setShowPresets((s) => !s)}>
-          <span>{showPresets ? "▾" : "▸"}</span> Color presets
-        </button>
-        {showPresets && (
-          <div className="bg-presets">
-            {BG_PRESETS.map((p) => (
+        {showBackgroundOptions && (
+          <div className="optional-controls">
+            {aiConfigured && (
+              <Field label="Generate background style" hint="Describe a visual direction; the generator chooses a fill, shape, and palette.">
+                <Segmented
+                  value={aiProvider}
+                  onChange={(v) => setAiProvider(v as AiProvider)}
+                  options={[
+                    { value: "cerebras", label: "Cerebras 120B" },
+                    { value: "groq", label: "Groq 70B" },
+                  ]}
+                />
+                <TextInput value={aiPrompt} onChange={setAiPrompt} placeholder="e.g. calm, warm, organic" />
+                <button
+                  className="ghost small upload-btn"
+                  disabled={aiBusy || !aiPrompt.trim()}
+                  onClick={runAiPrompt}
+                >
+                  {aiBusy ? "Generating…" : "Generate"}
+                </button>
+                <label className="ai-lock">
+                  <input
+                    type="checkbox"
+                    checked={lockStyle}
+                    onChange={(e) => setLockStyle(e.target.checked)}
+                  />
+                  Lock style (recolor only)
+                </label>
+                {aiProvider === "groq" && (
+                  <>
+                    <button className="ghost small upload-btn" onClick={() => setShowByok((s) => !s)}>
+                      {showByok ? "Hide key field" : "Use my own Groq key"}
+                    </button>
+                    {showByok && (
+                      <input
+                        className="text-input"
+                        type="password"
+                        placeholder="gsk_… (stored in this browser only)"
+                        value={byokKey}
+                        onChange={(e) => setByok(e.target.value)}
+                      />
+                    )}
+                  </>
+                )}
+                {aiError && (
+                  <div className="field__hint" style={{ color: "#c4523b" }}>
+                    {aiError}
+                  </div>
+                )}
+                {aiNote && !aiError && <div className="ai-note">"{aiNote}"</div>}
+              </Field>
+            )}
+            <div className="control-group">
+              <div className="field__label">Screenshot palette</div>
+              <div className="field__hint control-group__hint">
+                Samples this slide’s screenshot and replaces the background start color and shape color. Fill, shape, gradient end, and layout stay unchanged.
+              </div>
               <button
-                key={p.name}
-                className={"bg-preset" + (bg.color === p.color ? " active" : "")}
-                onClick={() => handleBgUpdate({ color: p.color, accent: p.accent })}
-                title={p.name}
+                className="ghost small upload-btn match-btn"
+                disabled={!activeAsset.image}
+                onClick={matchPalette}
               >
-                <span className="bg-preset__chip" style={{ background: p.color }}>
-                  <span className="bg-preset__ring" style={{ borderColor: p.accent }} />
-                </span>
-                <span className="bg-preset__name">{p.name}</span>
+                Match screenshot palette
               </button>
-            ))}
+            </div>
           </div>
         )}
       </section>
 
-      <section className="panel" id="sidebar-export">
+      <section className="panel" id="sidebar-export" hidden={activeTab !== "export"}>
         <div className="panel__title">Export</div>
-        <Field label="Release update mode">
-          <ReleaseUpdateControls
-            rows={releaseRows}
-            baselineDate={state.releaseBaseline?.createdAt}
-            busy={releaseBusy}
-            onCompare={onCompareRelease}
-            onExportChanged={onExportChanged}
-            onSetBaseline={onSetReleaseBaseline}
-          />
-        </Field>
-        <button className="ghost preflight-button" onClick={onRunPreflight}>Run release preflight</button>
         <div className="export-grid">
           <button className="primary" disabled={!!exporting} onClick={exportPng}>
             {exporting === "png" ? "…" : "Download this slide (PNG)"}
@@ -1070,33 +1039,64 @@ export function Sidebar(props: SidebarProps) {
           <button className="primary" disabled={!!exporting} onClick={exportZip}>
             {exporting === "zip" ? "Zipping…" : "Download ZIP (all slides + strip)"}
           </button>
-          {(languages.length > 0 || (state.settings.targets?.length ?? 0) > 1) && (
-            <button className="primary" disabled={!!exporting} onClick={exportAllLanguages}>
-              {exporting === "all"
-                ? "Zipping…"
-                : `Download all targets + languages (ZIP · ${state.settings.targets?.length ?? 1} targets)`}
-            </button>
-          )}
-        </div>
-        <div className="export-row">
-          <button className="ghost small" onClick={exportJson}>
-            Export project (JSON)
+          <button className="primary" disabled={!!exporting} onClick={exportAllLanguages}>
+            {exporting === "all"
+              ? "Zipping…"
+              : `Download all targets${languages.length > 0 ? " + languages" : ""} (ZIP · ${targetCount} ${targetCount === 1 ? "target" : "targets"})`}
           </button>
-          <button className="ghost small" onClick={() => jsonFileRef.current?.click()}>
-            Import project
-          </button>
-          <input
-            ref={jsonFileRef}
-            type="file"
-            accept="application/json,.json"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) importJson(f);
-              e.target.value = "";
-            }}
-          />
         </div>
+        <button className="disclosure optional-disclosure" onClick={() => setShowExportOptions((shown) => !shown)}>
+          <span>{showExportOptions ? "▾" : "▸"}</span> Advanced
+        </button>
+        {showExportOptions && (
+          <div className="optional-controls">
+            <Field
+              label="Release update mode"
+              hint="Compare the current assets with a saved baseline and export only files that changed."
+            >
+              <ReleaseUpdateControls
+                rows={releaseRows}
+                baselineDate={state.releaseBaseline?.createdAt}
+                busy={releaseBusy}
+                onCompare={onCompareRelease}
+                onExportChanged={onExportChanged}
+                onSetBaseline={onSetReleaseBaseline}
+              />
+            </Field>
+            <div className="control-group">
+              <div className="field__label">Release preflight</div>
+              <div className="field__hint control-group__hint">
+                Check dimensions, missing screenshots, and other release blockers before downloading.
+              </div>
+              <button className="ghost preflight-button" onClick={onRunPreflight}>Run release preflight</button>
+            </div>
+            <div className="control-group">
+              <div className="field__label">Project file</div>
+              <div className="field__hint control-group__hint">
+                Save an editable Truepane project or restore one from JSON.
+              </div>
+              <div className="export-row">
+                <button className="ghost small" onClick={exportJson}>
+                  Export project (JSON)
+                </button>
+                <button className="ghost small" onClick={() => jsonFileRef.current?.click()}>
+                  Import project
+                </button>
+                <input
+                  ref={jsonFileRef}
+                  type="file"
+                  accept="application/json,.json"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) importJson(file);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
         <div className="muted small">Auto-saved to this browser.</div>
         <div className="muted small" style={{ marginTop: 4, display: "inline-flex", alignItems: "center", gap: 12 }}>
           <a href="https://github.com/antonkarliner/truepane" target="_blank" rel="noopener noreferrer" style={{ color: "inherit", display: "inline-flex", alignItems: "center", gap: 5 }}>

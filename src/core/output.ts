@@ -17,6 +17,30 @@ function clampDimension(value: unknown, fallback: number): number {
   return Math.min(OUTPUT_MAX_DIMENSION, Math.max(OUTPUT_MIN_DIMENSION, numeric));
 }
 
+export function validateCustomOutputDimensions(
+  width: string,
+  height: string,
+): { width: number; height: number } | { error: string } {
+  if (!width.trim() || !height.trim()) return { error: "Enter both width and height." };
+  const parsedWidth = Number(width);
+  const parsedHeight = Number(height);
+  if (!Number.isInteger(parsedWidth) || !Number.isInteger(parsedHeight)) {
+    return { error: "Width and height must be whole pixels." };
+  }
+  if (
+    parsedWidth < OUTPUT_MIN_DIMENSION
+    || parsedWidth > OUTPUT_MAX_DIMENSION
+    || parsedHeight < OUTPUT_MIN_DIMENSION
+    || parsedHeight > OUTPUT_MAX_DIMENSION
+  ) {
+    return { error: `Use dimensions from ${OUTPUT_MIN_DIMENSION} to ${OUTPUT_MAX_DIMENSION} px.` };
+  }
+  if (parsedWidth * parsedHeight > OUTPUT_MAX_PIXELS) {
+    return { error: "Custom output must stay at or below 40 megapixels." };
+  }
+  return { width: parsedWidth, height: parsedHeight };
+}
+
 export function safeOutputDimensions(width: unknown, height: unknown): { width: number; height: number } {
   let safeWidth = clampDimension(width, 1080);
   let safeHeight = clampDimension(height, 1920);

@@ -20,7 +20,12 @@ import {
   MAX_BRAND_KIT_BYTES,
   normalizeBrandKit,
 } from "../../src/core/brand-kit";
-import { BUILTIN_OUTPUTS, normalizeOutput, outputForSettings } from "../../src/core/output";
+import {
+  BUILTIN_OUTPUTS,
+  normalizeOutput,
+  outputForSettings,
+  validateCustomOutputDimensions,
+} from "../../src/core/output";
 import {
   compareRelease,
   createReleaseBaseline,
@@ -116,6 +121,18 @@ function assertPlatform(platform: string): void {
   if (!PLATFORM_IDS.includes(platform)) {
     throw new Error(`Unknown platform "${platform}". Valid: ${PLATFORM_IDS.join(", ")}`);
   }
+}
+
+function customOutputDimensions(width: number | undefined, height: number | undefined): {
+  width: number;
+  height: number;
+} {
+  const result = validateCustomOutputDimensions(
+    width === undefined ? "" : String(width),
+    height === undefined ? "" : String(height),
+  );
+  if ("error" in result) throw new Error(result.error);
+  return result;
 }
 
 function imageFilesUnder(directory: string): { absolutePath: string; relativePath: string }[] {
@@ -731,7 +748,9 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         project_id: z.string().describe("Project id"),
         path: z.string().describe("Absolute path to a .truepane-brand.json file"),
-        clear_slide_overrides: z.boolean().optional().describe("Explicitly clear per-slide style/composition overrides"),
+        clear_slide_overrides: z.boolean().optional().describe(
+          "Before applying, clear every slide-specific background, text-color, and composition override so all slides inherit the kit",
+        ),
       },
     },
     async ({ project_id, path: kitPath, clear_slide_overrides }) => {
@@ -777,8 +796,8 @@ export function registerTools(server: McpServer): void {
       inputSchema: {
         project_id: z.string().describe("Project id"),
         output_id: z.enum(OUTPUT_CHOICES).describe("Built-in output id or custom"),
-        width: z.number().optional().describe("Custom width"),
-        height: z.number().optional().describe("Custom height"),
+        width: z.number().optional().describe("Custom width in whole pixels; required with height for output_id custom (320..8192)"),
+        height: z.number().optional().describe("Custom height in whole pixels; required with width for output_id custom (320..8192)"),
         frame: z.enum(PLATFORM_IDS as [string, ...string[]]).optional().describe("Device frame/source target"),
       },
     },
@@ -786,6 +805,9 @@ export function registerTools(server: McpServer): void {
       const project = getProject(project_id);
       const state = project.state;
       const builtin = BUILTIN_OUTPUTS.find((output) => output.id === output_id);
+      const customDimensions = output_id === "custom"
+        ? customOutputDimensions(width, height)
+        : undefined;
       if (builtin?.kind === "native") {
         state.settings.platform = builtin.frame;
         state.settings.output = undefined;
@@ -796,8 +818,8 @@ export function registerTools(server: McpServer): void {
             : {
                 id: "custom",
                 label: "Custom output",
-                width,
-                height,
+                width: customDimensions?.width,
+                height: customDimensions?.height,
                 store: getFrame(frame ?? state.settings.platform).store,
                 frame: frame ?? state.settings.platform,
               },
@@ -900,8 +922,8 @@ export function registerTools(server: McpServer): void {
           .describe('Platform target. Omit = active target; "all" = every settings.targets target.'),
         output_id: z.enum(OUTPUT_CHOICES).optional()
           .describe("Temporary output override for this render"),
-        output_width: z.number().optional().describe("Custom output width"),
-        output_height: z.number().optional().describe("Custom output height"),
+        output_width: z.number().optional().describe("Custom width in whole pixels; required with output_height for custom output (320..8192)"),
+        output_height: z.number().optional().describe("Custom height in whole pixels; required with output_width for custom output (320..8192)"),
         output_frame: z.enum(PLATFORM_IDS as [string, ...string[]]).optional().describe("Device frame for feature/custom output"),
         changed_only: z.boolean().optional().describe("Write only added/changed assets compared with the explicit release baseline"),
         language: z
@@ -915,6 +937,9 @@ export function registerTools(server: McpServer): void {
       const state = project.state;
       if (!path.isAbsolute(output_dir)) throw new Error(`output_dir must be an absolute path, got: ${output_dir}`);
       if (changed_only && output_id) throw new Error("changed_only uses the project's persisted output; set_output before comparing/rendering.");
+      const customDimensions = output_id === "custom"
+        ? customOutputDimensions(output_width, output_height)
+        : undefined;
       await ensureFontsForState(state);
       const mode = what ?? "slides";
       const k = scale ?? 1;
@@ -925,8 +950,8 @@ export function registerTools(server: McpServer): void {
               ? {
                   id: "custom",
                   label: "Custom output",
-                  width: output_width,
-                  height: output_height,
+                  width: customDimensions?.width,
+                  height: customDimensions?.height,
                   store: getFrame(output_frame ?? state.settings.platform).store,
                   frame: output_frame ?? state.settings.platform,
                 }
@@ -1087,6 +1112,8 @@ export function registerTools(server: McpServer): void {
       description:
         "Extract a color palette from a screenshot: the dominant vivid color as the shape/accent color plus a " +
         "soft near-white tint of it as the background color (same algorithm as the web app's palette button). " +
+        "Applying the suggestion changes the background base/gradient-start color and shape accent only; it " +
+        "does not change the fill, shape, gradient end, or layout. " +
         "Point it at a project slide (project_id + slide_index) or any local image file (image_path). Purely " +
         "local math — no AI, no network. Apply the result with set_style.",
       inputSchema: {

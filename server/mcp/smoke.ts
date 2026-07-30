@@ -261,6 +261,30 @@ async function main(): Promise<void> {
       },
     });
     assert.deepEqual(pngSize(path.join(customDir, "slide-01.png")), { w: 1200, h: 700 });
+    const incompleteCustom = await client.callTool({
+      name: "set_output",
+      arguments: {
+        project_id: "smoke",
+        output_id: "custom",
+        width: 1000,
+        frame: "android",
+      },
+    }) as { isError?: boolean; content: { type: string; text?: string }[] };
+    assert.equal(incompleteCustom.isError, true, "set_output should reject incomplete custom dimensions");
+    assert.match(firstText(incompleteCustom), /Enter both width and height/);
+    const oversizedCustom = await client.callTool({
+      name: "render",
+      arguments: {
+        project_id: "smoke",
+        output_dir: customDir,
+        output_id: "custom",
+        output_width: 8192,
+        output_height: 8192,
+        output_frame: "android",
+      },
+    }) as { isError?: boolean; content: { type: string; text?: string }[] };
+    assert.equal(oversizedCustom.isError, true, "render should reject custom canvases above 40 megapixels");
+    assert.match(firstText(oversizedCustom), /40 megapixels/);
     await client.callTool({
       name: "set_output",
       arguments: { project_id: "smoke", output_id: "ios" },
