@@ -19,6 +19,7 @@ import {
   resolveComposition,
   snapDevicePosition,
   snapPosition,
+  textPolygon,
   textSnapTargets,
   type Point,
   type TextBounds,
@@ -33,15 +34,6 @@ declare global {
 
 // What "Arrange on canvas" is currently acting on.
 type ArrangeTarget = "device" | "text";
-
-function pointInBounds(point: Point, bounds: TextBounds): boolean {
-  return (
-    point.x >= bounds.x &&
-    point.x <= bounds.x + bounds.w &&
-    point.y >= bounds.y &&
-    point.y <= bounds.y + bounds.h
-  );
-}
 
 // Scratch context for measuring only — text layout needs measureText, and
 // borrowing the preview's own context would leave its font state behind.
@@ -157,7 +149,9 @@ export function SlidePreview({
     geometry: ReturnType<typeof arrangeGeometry>,
   ): ArrangeTarget | null => {
     if (pointInPolygon(point, devicePolygon(geometry.resolved, geometry.frame))) return "device";
-    return pointInBounds(point, geometry.bounds) ? "text" : null;
+    return pointInPolygon(point, textPolygon(geometry.bounds, geometry.resolved.text.rotation))
+      ? "text"
+      : null;
   };
 
   const startArrange = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -291,22 +285,17 @@ export function SlidePreview({
               const geometry = arrangeGeometry(
                 normalizeComposition(effectiveSlide.composition ?? settings.composition),
               );
-              const b = geometry.bounds;
+              const outline =
+                arrangeTarget === "text"
+                  ? textPolygon(geometry.bounds, geometry.resolved.text.rotation)
+                  : devicePolygon(geometry.resolved, geometry.frame);
               return (
                 <svg
                   className="arrange-outline"
                   viewBox={`0 0 ${dim.W} ${dim.H}`}
                   preserveAspectRatio="none"
                 >
-                  {arrangeTarget === "text" ? (
-                    <rect x={b.x} y={b.y} width={b.w} height={b.h} />
-                  ) : (
-                    <polygon
-                      points={devicePolygon(geometry.resolved, geometry.frame)
-                        .map((p) => `${p.x},${p.y}`)
-                        .join(" ")}
-                    />
-                  )}
+                  <polygon points={outline.map((p) => `${p.x},${p.y}`).join(" ")} />
                 </svg>
               );
             })()}
@@ -453,6 +442,10 @@ export function CompositionControls({
             <Field label={`Width · ${Math.round(resolved.text.width * 100)}%`}>
               <input className="slider" type="range" min="0.2" max="1.2" step="0.005"
                 value={resolved.text.width} onChange={(e) => patchText({ width: Number(e.target.value) })} />
+            </Field>
+            <Field label={`Angle · ${resolved.text.rotation.toFixed(0)}°`}>
+              <input className="slider" type="range" min="-12" max="12" step="1"
+                value={resolved.text.rotation} onChange={(e) => patchText({ rotation: Number(e.target.value) })} />
             </Field>
           </div>
           <div className="control-group">

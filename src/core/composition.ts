@@ -41,6 +41,7 @@ function baseForPreset(preset: CompositionPreset, frame: Frame): ResolvedComposi
         y: preset === "editorial" ? 0.12 : 0.18,
         width: preset === "hero" ? 0.46 : 0.42,
         align,
+        rotation: 0,
       },
       device: {
         x: preset === "tilt-right" ? 0.72 : 0.76,
@@ -55,6 +56,7 @@ function baseForPreset(preset: CompositionPreset, frame: Frame): ResolvedComposi
     y: frame.TEXT.titleTop / frame.H,
     width: (frame.W - frame.TEXT.leftPad - frame.TEXT.rightPad) / frame.W,
     align: "left",
+    rotation: 0,
   };
   const classicDevice: DevicePlacement = {
     x: (frame.BODY.x + frame.BODY.w / 2) / frame.W,
@@ -66,27 +68,27 @@ function baseForPreset(preset: CompositionPreset, frame: Frame): ResolvedComposi
   if (preset === "hero") {
     return {
       preset,
-      text: { x: 0.12, y: 0.065, width: 0.76, align: "center" },
+      text: { x: 0.12, y: 0.065, width: 0.76, align: "center", rotation: 0 },
       device: { x: 0.5, y: 0.69, scale: 1.14, rotation: 0 },
     };
   }
   if (preset === "tilt-left") {
     return {
       preset,
-      text: { x: 0.085, y: 0.065, width: 0.79, align: "left" },
+      text: { x: 0.085, y: 0.065, width: 0.79, align: "left", rotation: 0 },
       device: { x: 0.59, y: 0.69, scale: 1.05, rotation: -6 },
     };
   }
   if (preset === "tilt-right") {
     return {
       preset,
-      text: { x: 0.125, y: 0.065, width: 0.79, align: "right" },
+      text: { x: 0.125, y: 0.065, width: 0.79, align: "right", rotation: 0 },
       device: { x: 0.41, y: 0.69, scale: 1.05, rotation: 6 },
     };
   }
   return {
     preset,
-    text: { x: 0.075, y: 0.055, width: 0.46, align: "left" },
+    text: { x: 0.075, y: 0.055, width: 0.46, align: "left", rotation: 0 },
     device: { x: 0.66, y: 0.69, scale: 0.86, rotation: 0 },
   };
 }
@@ -110,6 +112,9 @@ export function normalizeComposition(raw: unknown): Composition {
       ...(typeof textSrc.y === "number" ? { y: clamp(textSrc.y, -0.5, 1.5) } : {}),
       ...(typeof textSrc.width === "number" ? { width: clamp(textSrc.width, 0.2, 1.2) } : {}),
       ...(align ? { align } : {}),
+      ...(typeof textSrc.rotation === "number"
+        ? { rotation: clamp(textSrc.rotation, -12, 12) }
+        : {}),
     },
     device: {
       ...(typeof deviceSrc.x === "number" ? { x: clamp(deviceSrc.x, -0.5, 1.5) } : {}),
@@ -187,6 +192,25 @@ export interface TextBounds {
   y: number;
   w: number;
   h: number;
+}
+
+/** The text box's four corners, rotated the way `paintText` rotates them. */
+export function textPolygon(bounds: TextBounds, rotation: number): Point[] {
+  const cx = bounds.x + bounds.w / 2;
+  const cy = bounds.y + bounds.h / 2;
+  const angle = (rotation * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [
+    { x: bounds.x, y: bounds.y },
+    { x: bounds.x + bounds.w, y: bounds.y },
+    { x: bounds.x + bounds.w, y: bounds.y + bounds.h },
+    { x: bounds.x, y: bounds.y + bounds.h },
+  ].map((p) => {
+    const x = p.x - cx;
+    const y = p.y - cy;
+    return { x: cx + x * cos - y * sin, y: cy + x * sin + y * cos };
+  });
 }
 
 /**

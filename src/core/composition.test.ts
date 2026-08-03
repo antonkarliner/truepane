@@ -8,6 +8,7 @@ import {
   resolveComposition,
   snapDevicePosition,
   snapPosition,
+  textPolygon,
   textSnapTargets,
   spanDeviceAcrossPair,
   updateSpannedComposition,
@@ -25,6 +26,35 @@ describe("composition", () => {
     expect(resolved.device.x * frame.W).toBeCloseTo(frame.BODY.x + frame.BODY.w / 2);
     expect(resolved.device.y * frame.H).toBeCloseTo(frame.BODY.y + frame.BODY.h / 2);
     expect(resolved.device).toMatchObject({ scale: 1, rotation: 0 });
+  });
+
+  // Rotated text loses legibility much faster than a rotated device, so the
+  // text limit is deliberately tighter than the device's ±20.
+  it("clamps text rotation tighter than device rotation", () => {
+    const composition = normalizeComposition({
+      preset: "classic",
+      text: { rotation: 40 },
+      device: { rotation: 40 },
+    });
+    expect(composition.text).toMatchObject({ rotation: 12 });
+    expect(composition.device).toMatchObject({ rotation: 20 });
+    expect(normalizeComposition({ preset: "classic" }).text?.rotation).toBeUndefined();
+    expect(resolveComposition({ preset: "classic" }, frame).text.rotation).toBe(0);
+  });
+
+  // The hit region must rotate the same way the painter does, or a tilted
+  // block would be grabbable somewhere it is not drawn.
+  it("rotates the text hit polygon about the block center", () => {
+    const bounds = { x: 100, y: 200, w: 400, h: 100 };
+    const flat = textPolygon(bounds, 0);
+    expect(flat[0]).toEqual({ x: 100, y: 200 });
+    expect(flat[2]).toEqual({ x: 500, y: 300 });
+    const tilted = textPolygon(bounds, 90);
+    // A quarter turn about (300, 250) swaps the box's extents.
+    expect(tilted[0].x).toBeCloseTo(350);
+    expect(tilted[0].y).toBeCloseTo(50);
+    expect(tilted[2].x).toBeCloseTo(250);
+    expect(tilted[2].y).toBeCloseTo(450);
   });
 
   it("clamps persisted rotation and scale", () => {

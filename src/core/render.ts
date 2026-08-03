@@ -1032,6 +1032,8 @@ interface TextRun {
 export interface TextBlockLayout {
   /** The painted text column, in canvas px: title top through subhead bottom. */
   bounds: { x: number; y: number; w: number; h: number };
+  /** Rotation of the whole block about the center of `bounds`, in degrees. */
+  rotation: number;
   titleLines: string[];
   subheadLines: string[];
   title: TextRun;
@@ -1106,6 +1108,7 @@ export function layoutTextBlock(
 
   return {
     bounds: { x: left, y: top, w: maxW, h: Math.max(0, bottom - top) },
+    rotation: placement.rotation,
     titleLines,
     subheadLines: subhead ? subhead.lines : [],
     title: {
@@ -1144,8 +1147,18 @@ function paintText(
 ): void {
   ctx.textBaseline = "top";
   const layout = layoutTextBlock(ctx, slide, settings, F);
+  const tilted = layout.rotation !== 0;
+  if (tilted) {
+    const cx = layout.bounds.x + layout.bounds.w / 2;
+    const cy = layout.bounds.y + layout.bounds.h / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((layout.rotation * Math.PI) / 180);
+    ctx.translate(-cx, -cy);
+  }
   paintRun(ctx, layout.title);
   if (layout.subhead) paintRun(ctx, layout.subhead);
+  if (tilted) ctx.restore();
 
   // Restore defaults so later draws sharing this context are unaffected.
   ctx.textAlign = "left";

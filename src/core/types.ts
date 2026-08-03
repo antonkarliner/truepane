@@ -148,6 +148,11 @@ export interface TextPlacement {
   y: number;
   width: number;
   align: TextAlign;
+  /**
+   * Flat 2D rotation of the whole block in degrees, about its center. Clamped
+   * tighter than the device's ±20 — rotated text loses legibility faster.
+   */
+  rotation: number;
 }
 
 export interface DevicePlacement {
