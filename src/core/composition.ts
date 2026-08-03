@@ -181,10 +181,60 @@ export function clampDevicePosition(
   };
 }
 
-export function snapDevicePosition(x: number, y: number, threshold = 0.012): Point {
+/** The painted text column, in canvas px (`TextBlockLayout["bounds"]`). */
+export interface TextBounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Keep a fraction of the text block on canvas. Text is the readable payload,
+ * so the default keeps more of it visible than the device's 0.2 — a title
+ * dragged 90% off the edge is never intentional.
+ */
+export function clampTextPosition(
+  x: number,
+  y: number,
+  bounds: TextBounds,
+  frame: Frame,
+  visibleFraction = 0.35,
+): Point {
+  const w = bounds.w / frame.W;
+  const h = bounds.h / frame.H;
   return {
-    x: Math.abs(x - 0.5) <= threshold ? 0.5 : x,
-    y: Math.abs(y - 0.5) <= threshold ? 0.5 : y,
+    x: clamp(x, -w * (1 - visibleFraction), 1 - w * visibleFraction),
+    y: clamp(y, -h * (1 - visibleFraction), 1 - h * visibleFraction),
+  };
+}
+
+export function snapPosition(
+  x: number,
+  y: number,
+  targets: { x: number[]; y: number[] },
+  threshold = 0.012,
+): Point {
+  const nearest = (value: number, candidates: number[]) =>
+    candidates.find((candidate) => Math.abs(value - candidate) <= threshold) ?? value;
+  return { x: nearest(x, targets.x), y: nearest(y, targets.y) };
+}
+
+export function snapDevicePosition(x: number, y: number, threshold = 0.012): Point {
+  return snapPosition(x, y, { x: [0.5], y: [0.5] }, threshold);
+}
+
+/**
+ * Snap targets for the top-left of a text block: the frame's left and right
+ * text margins (so a dragged block re-aligns with the preset it came from),
+ * plus horizontal and vertical centering of the block itself.
+ */
+export function textSnapTargets(bounds: TextBounds, frame: Frame): { x: number[]; y: number[] } {
+  const w = bounds.w / frame.W;
+  const h = bounds.h / frame.H;
+  return {
+    x: [frame.TEXT.leftPad / frame.W, 1 - frame.TEXT.rightPad / frame.W - w, (1 - w) / 2],
+    y: [(1 - h) / 2],
   };
 }
 
