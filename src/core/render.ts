@@ -59,6 +59,13 @@ function createCanvas(width: number, height: number): CanvasLike {
   return c;
 }
 
+/** The configured canvas factory, for other core modules that need to
+ * rasterize (background-image import). Exported so there is exactly one
+ * factory: a second one would work in the browser and be unset in Node. */
+export function createSurface(width: number, height: number): CanvasLike {
+  return createCanvas(width, height);
+}
+
 // drawImage only needs a width/height-bearing pixel source at runtime, but
 // the DOM typings insist on the concrete CanvasImageSource union — funnel our
 // structural types through this single cast.
@@ -1004,14 +1011,26 @@ function paintBackgroundImage(
     image.fit,
   );
 
+  // Blur radius scales with the frame so it looks identical at any render
+  // scale or output size. `blur` is 0..1 (normalizeBackground clamps it), so
+  // full blur is ~8% of the frame width — a backdrop, not a sharpen.
+  const blurPx =
+    image.source.kind === "screenshot" && image.source.blur > 0
+      ? image.source.blur * F.W * 0.08
+      : 0;
+
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, image.opacity));
-  if (image.source.kind === "screenshot" && image.source.blur > 0) {
-    // Blur radius scales with the frame so it looks identical at any render
-    // scale or output size.
-    ctx.filter = `blur(${(image.source.blur / 100) * F.W * 0.08}px)`;
+  if (blurPx > 0) {
+    ctx.filter = `blur(${blurPx}px)`;
+    // A filtered drawImage samples transparent pixels outside the source, so
+    // an unpadded blur fades to the fill in a wide band around every edge.
+    // Growing the destination rect pushes that band off the slide.
+    const pad = blurPx * 2;
+    ctx.drawImage(toDrawable(drawable), dx - pad, dy - pad, dw + pad * 2, dh + pad * 2);
+  } else {
+    ctx.drawImage(toDrawable(drawable), dx, dy, dw, dh);
   }
-  ctx.drawImage(toDrawable(drawable), dx, dy, dw, dh);
   ctx.filter = "none";
   ctx.globalAlpha = 1;
 

@@ -10,6 +10,7 @@ import { normalizeAppState, serializeTranslations } from "../core/normalize";
 import type {
   AppState,
   Background,
+  BackgroundImage,
   Composition,
   ReleaseBaseline,
   Settings,
@@ -35,15 +36,28 @@ export interface StoredCustomFont {
   assetId: string;
 }
 
-export type StoredSettings = Omit<Settings, "customFont"> & {
+/** A background whose uploaded image is an asset reference rather than bytes.
+ * Screenshot-derived images have no bytes of their own and pass through. */
+export type StoredBackground = Omit<Background, "image"> & {
+  image?:
+    | (Omit<BackgroundImage, "source"> & {
+        source:
+          | { kind: "upload"; id: string; assetId: string; width: number; height: number }
+          | { kind: "screenshot"; blur: number };
+      })
+    | null;
+};
+
+export type StoredSettings = Omit<Settings, "customFont" | "background"> & {
   customFont: StoredCustomFont | null;
+  background: StoredBackground;
 };
 
 export interface StoredSlide {
   title: string;
   subhead: string;
   media?: Record<string, StoredTargetMedia>;
-  background?: Background;
+  background?: StoredBackground;
   composition?: Composition;
   deviceSpan?: Slide["deviceSpan"];
   translations?: Record<string, SlideText>;
@@ -91,7 +105,7 @@ export async function externalizeAssets(state: AppState): Promise<ExternalizedSt
       title: slide.title,
       subhead: slide.subhead,
       media: await externalizeMedia(slide.media, intern),
-      background: slide.background,
+      background: await externalizeBackground(slide.background, intern),
       composition: slide.composition,
       deviceSpan: slide.deviceSpan,
       translations: serializeTranslations(slide.translations),
@@ -106,7 +120,11 @@ export async function externalizeAssets(state: AppState): Promise<ExternalizedSt
   return {
     document: {
       version: 1,
-      settings: { ...state.settings, customFont },
+      settings: {
+        ...state.settings,
+        customFont,
+        background: (await externalizeBackground(state.settings.background, intern))!,
+      },
       releaseBaseline: state.releaseBaseline,
       slides,
     },
@@ -114,10 +132,56 @@ export async function externalizeAssets(state: AppState): Promise<ExternalizedSt
   };
 }
 
+/**
+ * Swaps an uploaded background image's bytes for a content id.
+ *
+ * A custom backdrop is the largest asset the app holds, and it is shared by
+ * every slide that does not override it — leaving it inline would put the same
+ * megabytes in the document on every save, which is the exact cost the asset
+ * store exists to remove.
+ *
+ * A background with no image is returned untouched, so projects that never
+ * used the feature store byte-for-byte what they always did.
+ */
+async function externalizeBackground(
+  background: Background | undefined,
+  intern: (dataUrl: string) => Promise<string>,
+): Promise<StoredBackground | undefined> {
+  if (!background) return undefined;
+  const image = background.image;
+  if (!image || image.source.kind !== "upload") return background as unknown as StoredBackground;
+  const { dataUrl, ...source } = image.source;
+  return {
+    ...background,
+    image: { ...image, source: { ...source, assetId: await intern(dataUrl) } },
+  };
+}
+
+function internalizeBackground(
+  background: StoredBackground | undefined,
+  resolve: (id: string) => string | null,
+): Background | undefined {
+  if (!background) return undefined;
+  const image = background.image;
+  if (!image || image.source.kind !== "upload") return background as unknown as Background;
+  const { assetId: id, ...source } = image.source;
+  const dataUrl = resolve(id);
+  // An evicted asset degrades to "no background image", never to a reference
+  // the renderer cannot resolve — same rule the screenshots follow.
+  if (!dataUrl) {
+    const { image: _dropped, ...rest } = background;
+    return rest as unknown as Background;
+  }
+  return {
+    ...background,
+    image: { ...image, source: { ...source, dataUrl } },
+  } as unknown as Background;
+}
+
 // Walks exactly the fields serializeMedia walks, by walking its output: any
-// media field it persists is a field this externalizes. Plan 008's
-// settings.background.image / slide.background.image attach alongside, in
-// externalizeAssets and internalizeAssets.
+// media field it persists is a field this externalizes.
+// settings.background.image / slide.background.image attach alongside, via
+// externalizeBackground / internalizeBackground.
 async function externalizeMedia(
   media: Slide["media"],
   intern: (dataUrl: string) => Promise<string>,
@@ -165,11 +229,13 @@ export function internalizeAssets(
     settings: {
       ...document.settings,
       customFont: font && fontDataUrl ? { name: font.name, dataUrl: fontDataUrl } : null,
+      background: internalizeBackground(document.settings.background, resolve),
     },
     releaseBaseline: document.releaseBaseline,
     slides: document.slides.map((slide) => ({
       ...slide,
       media: internalizeMedia(slide.media, resolve),
+      background: internalizeBackground(slide.background, resolve),
     })),
   });
 }

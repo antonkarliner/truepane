@@ -5,14 +5,17 @@
 // Nothing under src/core/* may import this module — core is shared verbatim
 // with the Node MCP server, which has no IndexedDB.
 
+import { assetId, dataUrlToBlob } from "../core/content-id";
+
+// The content id and the data-URL decoder live in core so the MCP server's
+// background-image importer can hash bytes with the identical function. They
+// are re-exported here because this is where storage callers expect them.
+export { assetId, dataUrlToBlob };
+
 const DB_NAME = "truepane";
 const DB_VERSION = 1;
 export const ASSET_STORE = "assets";
 export const DOCUMENT_STORE = "documents";
-
-// 128 bits of SHA-256. Long enough that a collision between two screenshots is
-// not a thing that happens; short enough to keep documents readable.
-const ID_LENGTH = 32;
 
 // Stored as a raw ArrayBuffer, not a Blob, deliberately.
 //
@@ -75,14 +78,6 @@ function txDone(transaction: IDBTransaction): Promise<void> {
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
   });
-}
-
-/** Content id for a blob: the hex SHA-256 of its bytes, truncated. */
-export async function assetId(bytes: Blob): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", await bytes.arrayBuffer());
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
-    .slice(0, ID_LENGTH);
 }
 
 /**
@@ -160,23 +155,3 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/**
- * Decodes a `data:` URL into a blob. The document layer holds data URLs (that
- * is what the render path and the exported project format speak); the store
- * holds bytes, which is where the ~33% base64 tax disappears.
- */
-export function dataUrlToBlob(dataUrl: string): Blob {
-  const comma = dataUrl.indexOf(",");
-  if (!dataUrl.startsWith("data:") || comma < 0) {
-    throw new Error("not a data URL");
-  }
-  const header = dataUrl.slice("data:".length, comma);
-  const base64 = header.endsWith(";base64");
-  const type = (base64 ? header.slice(0, -";base64".length) : header).split(";")[0] || "application/octet-stream";
-  const payload = dataUrl.slice(comma + 1);
-  if (!base64) return new Blob([decodeURIComponent(payload)], { type });
-  const binary = atob(payload);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type });
-}

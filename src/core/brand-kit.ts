@@ -66,6 +66,13 @@ export function normalizeBrandKit(raw: unknown): BrandKit {
   if (customFont?.dataUrl && typeof customFont.dataUrl === "string" && customFont.dataUrl.length > MAX_BRAND_KIT_BYTES) {
     throw new Error("Custom font in brand kit is too large.");
   }
+  // A brand backdrop travels with the kit, which is correct — but it is the
+  // largest thing a kit can carry, and the font check alone would let an
+  // arbitrarily large image through the same door.
+  const kitImage = (style.background as { image?: { source?: { dataUrl?: unknown } } } | undefined)?.image;
+  if (typeof kitImage?.source?.dataUrl === "string" && kitImage.source.dataUrl.length > MAX_BRAND_KIT_BYTES) {
+    throw new Error("Background image in brand kit is too large.");
+  }
   return brandKitFromSettings(
     typeof source.name === "string" ? source.name : "Imported brand",
     {

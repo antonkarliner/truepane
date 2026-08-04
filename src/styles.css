@@ -707,6 +707,9 @@ button { cursor: pointer; font: inherit; }
 .output-size-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .output-size-grid .field { margin-bottom: 8px; }
 .output-size-error { color: var(--danger); margin: -2px 0 12px; }
+/* Background image size hint / import failure. An oversized image still works,
+   so this warns in the danger color without ever blocking the upload. */
+.bg-image-note { color: var(--danger); }
 .release-update { display: grid; gap: 10px; }
 .release-update__summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .release-stat {

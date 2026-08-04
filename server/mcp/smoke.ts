@@ -3,7 +3,7 @@
 // with the exact expected pixel dimensions. Run with: npm run mcp:smoke
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import * as assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -29,6 +29,36 @@ function fakeScreenshot(dir: string, name: string, color: string): string {
   const file = path.join(dir, `${name}.png`);
   fs.writeFileSync(file, c.toBuffer("image/png"));
   return file;
+}
+
+// A panorama sized for the whole strip: a continuous horizontal hue ramp, so a
+// backdrop that repeats per slide instead of flowing across it is obvious both
+// to the assertions below and to a human looking at the PNGs.
+function stripPanorama(dir: string, width: number, height: number): string {
+  const c = createCanvas(width, height);
+  const ctx = c.getContext("2d");
+  const gradient = ctx.createLinearGradient(0, 0, width, 0);
+  for (let stop = 0; stop <= 10; stop++) {
+    gradient.addColorStop(stop / 10, `hsl(${stop * 36}, 70%, 45%)`);
+  }
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+  const file = path.join(dir, "panorama.png");
+  fs.writeFileSync(file, c.toBuffer("image/png"));
+  return file;
+}
+
+/** RGB of one pixel in a rendered PNG. */
+async function pixelAt(file: string, x: number, y: number): Promise<[number, number, number]> {
+  const img = await loadImage(fs.readFileSync(file));
+  const c = createCanvas(img.width, img.height);
+  c.getContext("2d").drawImage(img, 0, 0);
+  const data = c.getContext("2d").getImageData(x, y, 1, 1).data;
+  return [data[0], data[1], data[2]];
+}
+
+function channelDistance(a: [number, number, number], b: [number, number, number]): number {
+  return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
 }
 
 function firstText(res: unknown): string {
@@ -65,6 +95,7 @@ async function main(): Promise<void> {
       "list_options",
       "load_project",
       "render",
+      "set_background_image",
       "set_output",
       "set_release_baseline",
       "set_screenshots",
@@ -81,6 +112,7 @@ async function main(): Promise<void> {
       "span_device_across_slides",
       "export_brand_kit",
       "Google Play feature",
+      "set_background_image",
       "validate_project",
       "render changed_only",
       "export_project and load_project",
@@ -598,6 +630,78 @@ async function main(): Promise<void> {
       "Inter slide-01 should differ at weight 900 vs 700 (single-file variable font resolves the full range)",
     );
     console.error("variable Google font (Inter 700 vs 900): OK");
+
+    // 12) background image, spanned across the strip.
+    //
+    // The whole point of strip span is that the seam between two exported
+    // slides is invisible on a store listing page. That is a continuity claim
+    // about adjacent pixels, so this asserts exactly that: the last column of
+    // slide N and the first column of slide N+1 must be the same colour, and
+    // slide 1 must not simply repeat on slide 2.
+    await client.callTool({
+      name: "create_project",
+      arguments: {
+        id: "bg-smoke",
+        platform: "ios",
+        slides: [{ title: "One" }, { title: "Two" }, { title: "Three" }, { title: "Four" }],
+      },
+    });
+    // 1320*4 x 2868 is the strip; half that is what the importer stores.
+    const panorama = stripPanorama(tmp, 2640, 1434);
+    const bgSet = firstText(await client.callTool({
+      name: "set_background_image",
+      arguments: { project_id: "bg-smoke", image_path: panorama, span: "strip" },
+    }));
+    assert.match(bgSet, /Background image set for every slide/);
+    assert.match(bgSet, /5280x2868/, "should report the full-strip destination box");
+
+    // A style patch tunes placement without needing the bytes again.
+    const bgStyled = firstText(await client.callTool({
+      name: "set_style",
+      arguments: {
+        project_id: "bg-smoke",
+        background: { image: { scrim: 0.25, scrimColor: "#101010", opacity: 0.95 } },
+      },
+    }));
+    assert.match(bgStyled, /"scrim":0\.25/, "set_style should accept an image placement patch");
+    assert.match(bgStyled, /"span":"strip"/, "a placement patch must not erase the image it tunes");
+    assert.doesNotMatch(bgStyled, /base64/, "tool responses must not echo the image bytes back");
+
+    const bgDir = path.join(outDir, "background-strip");
+    await client.callTool({
+      name: "render",
+      arguments: { project_id: "bg-smoke", output_dir: bgDir, what: "slides", scale: 0.5 },
+    });
+    const bgWidth = pngSize(path.join(bgDir, "slide-01.png")).w;
+    const sampleY = 8; // above the text block: background pixels only
+    for (let slide = 1; slide < 4; slide++) {
+      const left = await pixelAt(path.join(bgDir, `slide-0${slide}.png`), bgWidth - 1, sampleY);
+      const right = await pixelAt(path.join(bgDir, `slide-0${slide + 1}.png`), 0, sampleY);
+      assert.ok(
+        channelDistance(left, right) <= 12,
+        `seam between slide ${slide} and ${slide + 1} does not line up: ${left} vs ${right}`,
+      );
+    }
+    const firstSlideLeft = await pixelAt(path.join(bgDir, "slide-01.png"), 0, sampleY);
+    const secondSlideLeft = await pixelAt(path.join(bgDir, "slide-02.png"), 0, sampleY);
+    assert.ok(
+      channelDistance(firstSlideLeft, secondSlideLeft) > 20,
+      "strip span repeated the same slice on every slide instead of advancing",
+    );
+    console.error("background image strip continuity: OK");
+
+    const bgCleared = firstText(await client.callTool({
+      name: "set_background_image",
+      arguments: { project_id: "bg-smoke", clear: true },
+    }));
+    assert.match(bgCleared, /Cleared the background image for every slide/);
+    const bgClearedPath = path.join(tmp, "bg-cleared.json");
+    await client.callTool({ name: "export_project", arguments: { project_id: "bg-smoke", path: bgClearedPath } });
+    assert.equal(
+      JSON.parse(fs.readFileSync(bgClearedPath, "utf8")).settings.background.image,
+      undefined,
+      "cleared background image should be absent, not null",
+    );
 
     console.error(`\nSMOKE OK — inspect renders in ${outDir}`);
     console.log(outDir); // machine-readable: the only stdout line
