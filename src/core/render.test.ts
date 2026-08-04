@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   RING_LAYOUTS,
   backgroundImageRect,
+  MAX_CUSTOM_PLACEMENTS,
   customShapePositions,
   defineFrame,
   getFrame,
@@ -248,14 +249,17 @@ describe("customShapePositions", () => {
     expect(perSlide.reduce((a, b) => a + b, 0)).toBe(positions.length);
   });
 
-  // `count` is a strip total, not a per-slide amount. Adding slides must not
-  // multiply the instance count — that is what keeps the allocation bound at
-  // 200 no matter how long the strip gets, and what makes `count` mean the same
-  // thing to an agent regardless of project size.
-  it("treats count as a strip total, so it does not drift with slide count", () => {
-    for (const layout of LAYOUTS) {
+  // `count` is per slide, so visual density is what stays constant as a project
+  // grows — the same rule every other seeded family follows (paintBlobs and
+  // paintBubbles scale by totalSlides, paintDots by strip width). A fixed strip
+  // total would instead make a background thin out each time a slide is added,
+  // which is both surprising and inconsistent with the other ten families.
+  it("holds density constant as slides are added, rather than thinning out", () => {
+    for (const layout of ["scatter", "row", "wave", "radial"] as const) {
       const s = spec({ layout, count: 12 });
-      expect(customShapePositions(s, 7, 6).length).toBe(customShapePositions(s, 7, 3).length);
+      const three = customShapePositions(s, 7, 3).length;
+      const six = customShapePositions(s, 7, 6).length;
+      expect(six / three, `layout ${layout} did not scale with slide count`).toBeCloseTo(2, 1);
     }
   });
 
@@ -264,9 +268,13 @@ describe("customShapePositions", () => {
   // existing slide's pixels shift when the project grows.
   it("extends a lattice along the strip instead of re-laying it out", () => {
     const s = spec({ layout: "row", count: 12 });
-    expect(customShapePositions(s, 7, 6).map((p) => p.cx)).toEqual(
-      customShapePositions(s, 7, 3).map((p) => p.cx),
-    );
+    const three = customShapePositions(s, 7, 3).map((p) => p.cx);
+    const six = customShapePositions(s, 7, 6).map((p) => p.cx);
+    // The longer strip adds instances on the end; it must not move the ones a
+    // shorter project already renders, or every existing slide's pixels shift
+    // the moment a slide is appended.
+    expect(six.slice(0, three.length)).toEqual(three);
+    expect(six.length).toBeGreaterThan(three.length);
   });
 
   // Agents send junk. Hostile input must clamp and render — never hang on an
@@ -284,7 +292,7 @@ describe("customShapePositions", () => {
     for (const raw of hostile) {
       const positions = customShapePositions(raw as CustomShapeSpec, 1, 6);
       expect(positions.length).toBeGreaterThan(0);
-      expect(positions.length).toBeLessThanOrEqual(200);
+      expect(positions.length).toBeLessThanOrEqual(MAX_CUSTOM_PLACEMENTS);
       for (const p of positions) {
         expect(Number.isFinite(p.cx) && Number.isFinite(p.cy)).toBe(true);
         expect(Number.isFinite(p.r) && Number.isFinite(p.rot)).toBe(true);
@@ -293,7 +301,7 @@ describe("customShapePositions", () => {
       }
     }
     // A hostile totalSlides must not become the allocation bound either.
-    expect(customShapePositions(DEFAULT_CUSTOM_SHAPE, 1, 1e9).length).toBeLessThanOrEqual(200);
+    expect(customShapePositions(DEFAULT_CUSTOM_SHAPE, 1, 1e9).length).toBeLessThanOrEqual(MAX_CUSTOM_PLACEMENTS);
     expect(customShapePositions(DEFAULT_CUSTOM_SHAPE, 1, NaN).length).toBeGreaterThan(0);
   });
 

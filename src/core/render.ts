@@ -881,6 +881,9 @@ export interface CustomShapePlacement {
  * reaches the renderer without going through project normalization still cannot
  * ask for an unbounded allocation.
  */
+/** Hard ceiling on placements per strip, whatever count x slides multiplies to. */
+export const MAX_CUSTOM_PLACEMENTS = 2000;
+
 export function customShapePositions(
   spec: CustomShapeSpec,
   seed: number,
@@ -892,11 +895,16 @@ export function customShapePositions(
   const out: CustomShapePlacement[] = [];
 
   // The lattice layouts derive their extent from spacing; `count` caps how much
-  // of it gets filled, so it stays the single allocation bound for every layout.
+  // of it gets filled, so it stays the allocation bound for every layout.
   const cols = Math.max(1, Math.ceil(N / s.spacingX));
   const rows = Math.max(1, Math.round(1 / s.spacingY));
-  const total =
-    s.layout === "grid" ? Math.min(s.count, cols * rows) : s.count;
+  // `count` is per slide, matching every other seeded family — paintBlobs and
+  // paintBubbles both use `round(totalSlides * density)`, and paintDots derives
+  // its columns from the strip width. Adding a slide therefore extends the
+  // composition at the same density instead of thinning the existing one out.
+  // MAX_CUSTOM_PLACEMENTS keeps that product a hard allocation bound.
+  const perStrip = Math.min(s.count * N, MAX_CUSTOM_PLACEMENTS);
+  const total = s.layout === "grid" ? Math.min(perStrip, cols * rows) : perStrip;
 
   for (let i = 0; i < total; i++) {
     // Draw the same number of samples per instance in the same order for every
