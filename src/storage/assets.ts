@@ -14,9 +14,19 @@ export const DOCUMENT_STORE = "documents";
 // not a thing that happens; short enough to keep documents readable.
 const ID_LENGTH = 32;
 
+// Stored as a raw ArrayBuffer, not a Blob, deliberately.
+//
+// WebKit implements Blob-in-IndexedDB by writing the blob out to a temporary
+// file and storing a reference to it, which has a long history of failing:
+// blobs cannot be stored at all in iOS private browsing (WebKit #198278), and
+// "Error preparing blob/file" is a recurring report elsewhere. ArrayBuffer is
+// structured-cloned directly into the record with no file machinery involved,
+// and is reliable across Chrome, Firefox, and Safari. The public API still
+// speaks Blob — only the on-disk representation changed.
 interface AssetRecord {
-  blob: Blob;
-  bytes: number;
+  bytes: ArrayBuffer;
+  size: number;
+  type: string;
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -82,12 +92,17 @@ export async function assetId(bytes: Blob): Promise<string> {
  */
 export async function putAsset(bytes: Blob): Promise<string> {
   const id = await assetId(bytes);
+  // Hash and decode BEFORE opening the transaction. An await between the
+  // getKey below and its put would let the transaction auto-commit first and
+  // the write would silently vanish.
+  const buffer = await bytes.arrayBuffer();
+  const type = bytes.type;
   const db = await openDb();
   const transaction = db.transaction(ASSET_STORE, "readwrite");
   const store = transaction.objectStore(ASSET_STORE);
   const existing = await requestResult(store.getKey(id));
   if (existing === undefined) {
-    const record: AssetRecord = { blob: bytes, bytes: bytes.size };
+    const record: AssetRecord = { bytes: buffer, size: buffer.byteLength, type };
     store.put(record, id);
   }
   await txDone(transaction);
@@ -98,7 +113,11 @@ export async function getAsset(id: string): Promise<Blob | null> {
   const db = await openDb();
   const store = db.transaction(ASSET_STORE, "readonly").objectStore(ASSET_STORE);
   const record = (await requestResult(store.get(id))) as AssetRecord | undefined;
-  return record?.blob ?? null;
+  if (!record) return null;
+  // Records written before the Blob → ArrayBuffer change still read back.
+  const legacy = (record as unknown as { blob?: Blob }).blob;
+  if (legacy) return legacy;
+  return new Blob([record.bytes], { type: record.type });
 }
 
 export async function deleteAssets(ids: string[]): Promise<void> {
