@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { defaultState } from "../../src/core/constants";
 import { normalizeAppState, serializeTranslations } from "../../src/core/normalize";
 import { serializeMedia } from "../../src/core/media";
+import { hasBackgroundImage, registerBackgroundImage } from "../../src/core/render";
 import type { AppState, ImageSourceLike } from "../../src/core/types";
 import { tryLoadImage } from "./canvas";
 
@@ -81,9 +82,28 @@ async function decodeDataUrl(dataUrl: string): Promise<ImageSourceLike | null> {
   )) as unknown as ImageSourceLike | null;
 }
 
+/**
+ * Decode every uploaded background image in a project and hand it to the
+ * renderer's registry.
+ *
+ * paintSlide is synchronous and looks background images up by content id, so a
+ * loaded project that skips this step renders its fill and its shapes but
+ * silently loses the backdrop.
+ */
+export async function hydrateBackgroundImages(state: AppState): Promise<void> {
+  const backgrounds = [state.settings.background, ...state.slides.map((slide) => slide.background)];
+  for (const background of backgrounds) {
+    const source = background?.image?.source;
+    if (source?.kind !== "upload" || hasBackgroundImage(source.id)) continue;
+    const image = await decodeDataUrl(source.dataUrl);
+    if (image) registerBackgroundImage(source.id, image);
+  }
+}
+
 /** Rebuild napi Images from imageDataUrl strings (after load_project) — the
  * base screenshot on each slide plus any per-locale translation screenshots. */
 export async function hydrateImages(state: AppState): Promise<void> {
+  await hydrateBackgroundImages(state);
   for (const slide of state.slides) {
     for (const target of Object.values(slide.media ?? {})) {
       if (target.source?.imageDataUrl && !target.source.image) {

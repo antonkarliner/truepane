@@ -9,7 +9,11 @@ import { accentSuggestions, extractPalette } from "./palette";
 import { aiConfigured, generateBackground, type AiProvider } from "./ai";
 import { BG_PRESETS, FONT_OPTIONS } from "./core/constants";
 import { getImageAsset, setImageAsset } from "./core/media";
-import type { AppState, Background, BackgroundFill, Composition, ReleaseAssetComparison, ShapeKind, Settings, Slide } from "./core/types";
+import type { AppState, Background, BackgroundFill, BackgroundImage, Composition, ReleaseAssetComparison, ShapeKind, Settings, Slide } from "./core/types";
+
+// Where a background image applies. Derived from the background state, not
+// stored — mirrors the same type in src/Sidebar.tsx.
+type BackgroundImageScope = "this" | "all" | "strip";
 import type { BrandKit } from "./core/brand-kit";
 
 const DEFAULT_SHAPE_PRESETS = ["#c47c3b", "#1a1612", "#5b6647", "#c4523b", "#5b6cff", "#8a6f4f"];
@@ -24,6 +28,10 @@ export interface MobileLayoutProps {
   updateSettings: (patch: Partial<Settings>) => void;
   updateBackground: (patch: Partial<Background>) => void;
   updateSlideBackground: (patch: Partial<Background>) => void;
+  importBackgroundImage: (
+    source: HTMLImageElement,
+    span: BackgroundImage["span"],
+  ) => Promise<{ image: BackgroundImage; warning: string | null }>;
   selected: Slide;
   updateSlide: (patch: Partial<Slide>) => void;
   deleteSelected: () => void;
@@ -65,7 +73,7 @@ export interface MobileLayoutProps {
 export function MobileLayout(props: MobileLayoutProps) {
   const {
     state, selectedIndex, setSelectedIndex, setFont, onCustomFont,
-    updateSettings, updateBackground, updateSlideBackground,
+    updateSettings, updateBackground, updateSlideBackground, importBackgroundImage,
     selected, updateSlide, deleteSelected, moveSelected,
     addSlide,
     exportPng, exportStrip, exportZip, exportJson, importJson, exporting,
@@ -110,6 +118,8 @@ export function MobileLayout(props: MobileLayoutProps) {
   const [showByok, setShowByok] = useState(false);
   const [autoAccent, setAutoAccent] = useState(true);
   const [showPresets, setShowPresets] = useState(false);
+  const [bgImageBusy, setBgImageBusy] = useState(false);
+  const [bgImageNote, setBgImageNote] = useState<string | null>(null);
   const [showContentOptions, setShowContentOptions] = useState(false);
   const [showStyleOptions, setShowStyleOptions] = useState(false);
   const [aiProvider, setAiProvider] = useState<AiProvider>("cerebras");
@@ -182,6 +192,67 @@ export function MobileLayout(props: MobileLayoutProps) {
     if (hasCompositionOverride) updateSlide({ composition: undefined });
     else updateSlide({ composition: { ...(state.settings.composition ?? { preset: "classic" }) } });
   };
+
+  // Background image — the same one field the desktop sidebar edits. "this"
+  // means the image sits on this slide's own background override; "all" and
+  // "strip" mean it sits on settings.
+  const bgImage = bg.image ?? null;
+  const isDerivedBackdrop = bgImage?.source.kind === "screenshot";
+  const imageScope: BackgroundImageScope =
+    bgImage?.span === "strip" ? "strip" : hasSlideOverride && selected.background?.image ? "this" : "all";
+
+  const patchImage = (patch: Partial<BackgroundImage>) => {
+    if (!bgImage) return;
+    handleBgUpdate({ image: { ...bgImage, ...patch } });
+  };
+
+  const setImageScope = (scope: BackgroundImageScope) => {
+    if (!bgImage) return;
+    if (scope === "this") {
+      if (hasSlideOverride) updateSlideBackground({ image: { ...bgImage, span: "slide" } });
+      else updateSlide({ background: { ...state.settings.background, image: { ...bgImage, span: "slide" } } });
+      return;
+    }
+    updateBackground({ image: { ...bgImage, span: scope === "strip" ? "strip" : "slide" } });
+    if (selected.background?.image) updateSlideBackground({ image: null });
+  };
+
+  const applyBackgroundImage = async (source: HTMLImageElement) => {
+    setBgImageBusy(true);
+    setBgImageNote(null);
+    try {
+      const { image, warning } = await importBackgroundImage(
+        source,
+        imageScope === "strip" ? "strip" : "slide",
+      );
+      handleBgUpdate({ image });
+      setBgImageNote(warning);
+    } catch (error) {
+      setBgImageNote(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBgImageBusy(false);
+    }
+  };
+
+  const toggleDerivedBackdrop = (on: boolean) => {
+    handleBgUpdate({
+      image: on
+        ? {
+            source: { kind: "screenshot", blur: 0.5 },
+            span: "slide",
+            fit: "cover",
+            opacity: 1,
+            scrim: 0,
+            scrimColor: "#000000",
+            meanLuminance: 0.5,
+          }
+        : null,
+    });
+    setBgImageNote(null);
+  };
+
+  const slideSizeHint = `${dim.W} × ${dim.H}`;
+  const stripSizeHint = `${dim.W * Math.max(1, totalSlides)} × ${dim.H}`;
 
   const shapeMeta = SHAPE_FAMILIES.find((f) => f.id === bg.shape);
   const isGradient = bg.fill !== "solid";
@@ -698,6 +769,95 @@ export function MobileLayout(props: MobileLayoutProps) {
                     onEyedrop={requestEyedrop}
                     presets={DEFAULT_SHAPE_PRESETS}
                   />
+                )}
+
+                {/* Image layer — painted between the fill and the shapes. */}
+                <div className="control-group">
+                  <div className="field__label">Background image</div>
+                  <div className="field__hint control-group__hint">
+                    One slide needs {slideSizeHint}px; one image across the whole strip needs {stripSizeHint}px.
+                    Any size works — it is scaled and cropped to fit.
+                  </div>
+                  {!isDerivedBackdrop && (
+                    <ImageDrop
+                      image={bgImage?.source.kind === "upload" ? { dataUrl: bgImage.source.dataUrl } : null}
+                      onImage={(img) => void applyBackgroundImage(img)}
+                      onClear={() => {
+                        handleBgUpdate({ image: null });
+                        setBgImageNote(null);
+                      }}
+                    />
+                  )}
+                  {bgImageBusy && <div className="field__hint">Preparing image…</div>}
+                  {bgImageNote && <div className="field__hint bg-image-note">{bgImageNote}</div>}
+                  <label className="ai-lock">
+                    <input type="checkbox" checked={isDerivedBackdrop} onChange={(e) => toggleDerivedBackdrop(e.target.checked)} />
+                    Use blurred screenshot
+                  </label>
+                </div>
+
+                {bgImage && (
+                  <>
+                    {!isDerivedBackdrop && (
+                      <Field label="Image applies to">
+                        <Segmented
+                          value={imageScope}
+                          onChange={(value) => setImageScope(value as BackgroundImageScope)}
+                          options={[
+                            { value: "this", label: "This slide" },
+                            { value: "all", label: "All slides" },
+                            { value: "strip", label: "Across strip" },
+                          ]}
+                        />
+                      </Field>
+                    )}
+                    {isDerivedBackdrop && bgImage.source.kind === "screenshot" && (
+                      <Field label={`Blur · ${Math.round(bgImage.source.blur * 100)}%`}>
+                        <input
+                          className="slider" type="range" min="0" max="1" step="0.05"
+                          value={bgImage.source.blur}
+                          onChange={(e) => patchImage({ source: { kind: "screenshot", blur: parseFloat(e.target.value) } })}
+                        />
+                      </Field>
+                    )}
+                    <Field label={`Image opacity · ${Math.round(bgImage.opacity * 100)}%`}>
+                      <input
+                        className="slider" type="range" min="0" max="1" step="0.05"
+                        value={bgImage.opacity}
+                        onChange={(e) => patchImage({ opacity: parseFloat(e.target.value) })}
+                      />
+                    </Field>
+                    <Field
+                      label={`Scrim · ${Math.round(bgImage.scrim * 100)}%`}
+                      hint="Washes the image toward the scrim color. This is what keeps titles readable over a photo."
+                    >
+                      <input
+                        className="slider" type="range" min="0" max="1" step="0.05"
+                        value={bgImage.scrim}
+                        onChange={(e) => patchImage({ scrim: parseFloat(e.target.value) })}
+                      />
+                    </Field>
+                    {!isDerivedBackdrop && (
+                      <>
+                        <Field label="Image fit">
+                          <Segmented
+                            value={bgImage.fit}
+                            onChange={(value) => patchImage({ fit: value as BackgroundImage["fit"] })}
+                            options={[
+                              { value: "cover", label: "Fill" },
+                              { value: "contain", label: "Fit" },
+                            ]}
+                          />
+                        </Field>
+                        <ColorRow
+                          label="Scrim color"
+                          value={bgImage.scrimColor}
+                          onChange={(value) => patchImage({ scrimColor: value })}
+                          onEyedrop={requestEyedrop}
+                        />
+                      </>
+                    )}
+                  </>
                 )}
 
                 <Field label="Shape">

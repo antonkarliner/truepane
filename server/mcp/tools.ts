@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
 import { FONT_OPTIONS } from "../../src/core/constants";
+import { backgroundImageFromUpload, prepareBackgroundImage } from "../../src/core/background-image";
 import { normalizeBackground } from "../../src/core/normalize";
 import { COMPOSITION_PRESETS, mirrorSpannedMedia, normalizeComposition, spanDeviceAcrossPair, updateSpannedComposition } from "../../src/core/composition";
 import { getImageAsset, setImageAsset } from "../../src/core/media";
@@ -39,6 +40,7 @@ import {
   paintSlide,
   paintStrip,
   PLATFORMS,
+  registerBackgroundImage,
   RING_LAYOUTS,
   SHAPE_FAMILIES,
 } from "../../src/core/render";
@@ -48,6 +50,7 @@ import { ensureFamily, ensureFontsForState } from "./fonts";
 import {
   createProject,
   getProject,
+  hydrateBackgroundImages,
   listProjects,
   loadProjectFromFile,
   loadScreenshot,
@@ -70,6 +73,22 @@ const platformList = PLATFORMS.map((p) => {
   return `"${p.id}" (${p.storeLabel}, ${d.W}x${d.H}px)`;
 }).join(", ");
 
+// Placement knobs only — no bytes. Moving image data is set_background_image's
+// job, so an agent cannot write an unprocessed payload through a style patch.
+const backgroundImageSchema = z
+  .object({
+    span: z.enum(["slide", "strip"]).describe('"slide" fits one slide; "strip" fits the whole strip and slices it'),
+    fit: z.enum(["cover", "contain"]).describe("cover fills and crops; contain fits and letterboxes"),
+    opacity: z.number().min(0).max(1).describe("Image opacity over the fill, 0..1"),
+    scrim: z.number().min(0).max(1).describe("Wash of scrimColor over the image, 0..1 — the legibility control"),
+    scrimColor: z.string().describe("Scrim color (CSS color, default #000000)"),
+    useScreenshotBlur: z
+      .boolean()
+      .describe("Derive the background from this slide's own screenshot, blurred. Costs no storage. false clears it."),
+    blur: z.number().min(0).max(1).describe("Blur amount for useScreenshotBlur, 0..1"),
+  })
+  .partial();
+
 const backgroundSchema = z
   .object({
     fill: z.enum(FILL_IDS as [string, ...string[]]).describe("Fill layer: solid | linear | radial"),
@@ -88,6 +107,9 @@ const backgroundSchema = z
     density: z.number().min(1).max(8).describe("Shape density, 1..8 (seeded shapes)"),
     dotsAligned: z.boolean().describe('Align "dots" to a strict grid (no jitter)'),
     gradientAngle: z.number().describe("Linear gradient angle in degrees (default 135)"),
+    image: backgroundImageSchema.describe(
+      "Placement of the background image layer. Set the image itself with set_background_image.",
+    ),
   })
   .partial();
 
@@ -111,7 +133,50 @@ const compositionSchema = z.object({
 }).partial();
 
 function patchBackground(base: Background, patch: BackgroundPatch): Background {
-  return normalizeBackground({ ...base, ...patch });
+  const { image, ...rest } = patch;
+  const merged = { ...base, ...rest } as Background;
+  if (!image) return normalizeBackground(merged);
+
+  // A patch tunes the existing layer rather than replacing it — spreading the
+  // partial over the whole image would erase the source with every scrim tweak.
+  const current = base.image;
+  let source = current?.source;
+  if (image.useScreenshotBlur === true) {
+    source = {
+      kind: "screenshot",
+      blur: image.blur ?? (current?.source.kind === "screenshot" ? current.source.blur : 0.5),
+    };
+  } else if (image.useScreenshotBlur === false && current?.source.kind === "screenshot") {
+    // Turning the derived source off with no upload behind it means "no image".
+    return normalizeBackground({ ...merged, image: null });
+  } else if (image.blur !== undefined && source?.kind === "screenshot") {
+    source = { kind: "screenshot", blur: image.blur };
+  }
+  if (!source) {
+    throw new Error(
+      "This background has no image to place. Call set_background_image first, or pass image.useScreenshotBlur:true to derive one from the slide's screenshot.",
+    );
+  }
+  const { useScreenshotBlur: _mode, blur: _blur, ...placement } = image;
+  return normalizeBackground({ ...merged, image: { ...(current ?? {}), ...placement, source } });
+}
+
+/**
+ * The background as JSON for a tool response, with an uploaded image's bytes
+ * replaced by a short descriptor.
+ *
+ * Echoing a multi-megabyte data URL back at the agent that just set it would
+ * spend its whole context window on base64 it cannot use.
+ */
+function backgroundJson(background: Background): string {
+  const image = background.image;
+  if (!image || image.source.kind !== "upload") return JSON.stringify(background);
+  const { dataUrl, ...source } = image.source;
+  const kb = Math.round((dataUrl.length * 0.75) / 1024);
+  return JSON.stringify({
+    ...background,
+    image: { ...image, source: { ...source, dataUrl: `<${kb} KB, set via set_background_image>` } },
+  });
 }
 
 function text(msg: string) {
@@ -310,12 +375,24 @@ export function registerTools(server: McpServer): void {
           'Ring layouts (background.ringLayout, only for shape "rings"):',
           ...rings,
           "",
+          "Background image (an optional layer painted between the fill and the shapes):",
+          "- Set the bytes with set_background_image (absolute path; downscaled and re-encoded server-side).",
+          '- background.image.span: "slide" fits one slide; "strip" fits slide width x slide count and slices ' +
+            "it by slide, so one long backdrop flows continuously across the whole strip with no seam.",
+          '- background.image.fit: "cover" (fills and crops) | "contain" (fits and letterboxes).',
+          "- background.image.opacity (0..1) blends the image into the fill; background.image.scrim (0..1) " +
+            "washes background.image.scrimColor over it — scrim is the control that keeps titles readable.",
+          "- background.image.useScreenshotBlur:true derives the backdrop from each slide's own screenshot, " +
+            "blurred by background.image.blur (0..1). It costs no storage and is always slide-span.",
+          "- Without slide_index the image applies to every slide; with slide_index it is that slide's override.",
+          "",
           `Composition presets: ${COMPOSITION_PRESETS.map((p) => `"${p.id}" (${p.name})`).join(", ")}. ` +
             "Device rotation is flat 2D and bounded to -20..20 degrees.",
           "",
           "Capabilities and tools:",
           "- Build/edit projects: create_project, set_slides, set_screenshots, set_translations",
           "- Multi-target or bulk media: create_project targets, set_screenshots target/language, import_screenshots (dry-run first)",
+          "- Custom backdrops: set_background_image (one slide, every slide, or one image sliced across the strip)",
           "- Compose freely: set_style composition controls normalized text/device position, size, and rotation",
           "- Span one linked device across adjacent slides: span_device_across_slides (media and geometry stay synchronized)",
           "- Reuse visual systems: export_brand_kit, apply_brand_kit",
@@ -591,6 +668,108 @@ export function registerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "set_background_image",
+    {
+      title: "Set or clear the background image",
+      description:
+        "Put a custom image behind the slides. The image is read from an absolute local path, downscaled " +
+        "and re-encoded server-side, so an agent cannot write an oversized payload. " +
+        'span "slide" fits one slide; span "strip" fits the whole strip (slide width x slide count) and ' +
+        "slices it by slide, which is how one long backdrop flows continuously across the export. " +
+        "Without slide_index the image applies to every slide; with slide_index it becomes that slide's " +
+        "override. Pass clear:true to remove it. " +
+        "Tune opacity, scrim, fit, and scrimColor afterwards with set_style background.image; " +
+        "for a backdrop derived from the slide's own screenshot use set_style background.image.useScreenshotBlur " +
+        "instead of this tool — it costs no storage.",
+      inputSchema: {
+        project_id: z.string().describe("Project id"),
+        image_path: z
+          .string()
+          .optional()
+          .describe("Absolute path to a PNG/JPEG/WebP image. Required unless clear:true."),
+        slide_index: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe("If set, apply to this slide only instead of every slide"),
+        span: z
+          .enum(["slide", "strip"])
+          .optional()
+          .describe('"slide" (default) fits one slide; "strip" spreads one image across the whole strip'),
+        clear: z.boolean().optional().describe("Remove the background image instead of setting one"),
+      },
+    },
+    async ({ project_id, image_path, slide_index, span, clear }) => {
+      const project = getProject(project_id);
+      const state = project.state;
+      const slide = slide_index === undefined ? null : state.slides[slide_index];
+      if (slide_index !== undefined && !slide) {
+        throw new Error(`Slide index ${slide_index} out of range (project has ${state.slides.length} slides).`);
+      }
+
+      const write = (background: Background): void => {
+        if (slide) slide.background = background;
+        else state.settings.background = background;
+      };
+      const current = slide ? slide.background ?? state.settings.background : state.settings.background;
+
+      if (clear) {
+        write(normalizeBackground({ ...current, image: null }));
+        return text(
+          `Cleared the background image ${slide ? `on slide ${slide_index}` : "for every slide"}.\n${summarize(state, project.id)}`,
+        );
+      }
+      if (!image_path) throw new Error("Pass image_path, or clear:true to remove the background image.");
+
+      const { image } = await loadScreenshot(image_path);
+      if (!image) throw new Error(`Could not decode image at ${image_path}.`);
+
+      // Prepared against the whole strip, the largest box it could be painted
+      // into, so switching span later never needs a re-import.
+      const frame = getRenderFrame(state.settings.platform, state.settings.output);
+      const prepared = await prepareBackgroundImage(image, {
+        width: frame.W * Math.max(1, state.slides.length),
+        height: frame.H,
+      });
+      // The renderer is synchronous: it looks the decoded pixels up by content
+      // id rather than decoding mid-draw, so registering is not optional.
+      const decoded = await tryLoadImage(Buffer.from(prepared.source.dataUrl.split(",")[1] ?? "", "base64"));
+      if (!decoded) throw new Error("Re-encoded background image could not be decoded.");
+      registerBackgroundImage(prepared.source.id, decoded as unknown as ImageSourceLike);
+
+      write(
+        normalizeBackground({
+          ...current,
+          image: {
+            ...backgroundImageFromUpload(prepared, span ?? "slide"),
+            // Keep the placement the user already chose, if any.
+            ...(current.image
+              ? {
+                  fit: current.image.fit,
+                  opacity: current.image.opacity,
+                  scrim: current.image.scrim,
+                  scrimColor: current.image.scrimColor,
+                }
+              : {}),
+            span: span ?? current.image?.span ?? "slide",
+          },
+        }),
+      );
+
+      const notes = [
+        `Background image set ${slide ? `on slide ${slide_index}` : "for every slide"}: ` +
+          `${prepared.source.width}x${prepared.source.height}, span "${span ?? current.image?.span ?? "slide"}".`,
+      ];
+      if (prepared.warning) notes.push(prepared.warning);
+      notes.push(
+        `Destination box is ${frame.W * Math.max(1, state.slides.length)}x${frame.H} for a full-strip background, ${frame.W}x${frame.H} for one slide.`,
+      );
+      return text(`${notes.join("\n")}\n${summarize(state, project.id)}`);
+    },
+  );
+
+  server.registerTool(
     "span_device_across_slides",
     {
       title: "Span a device across two slides",
@@ -734,7 +913,7 @@ export function registerTools(server: McpServer): void {
         });
       }
       return text(
-        `Style updated. Background now: ${JSON.stringify(state.settings.background)}\n${summarize(state, project.id)}`,
+        `Style updated. Background now: ${backgroundJson(state.settings.background)}\n${summarize(state, project.id)}`,
       );
     },
   );
@@ -761,6 +940,9 @@ export function registerTools(server: McpServer): void {
       const kit = normalizeBrandKit(JSON.parse(fs.readFileSync(kitPath, "utf8")));
       const project = getProject(project_id);
       project.state = applyBrandKit(project.state, kit, clear_slide_overrides === true);
+      // A kit can carry a brand backdrop; the renderer only paints images it
+      // has been handed by content id.
+      await hydrateBackgroundImages(project.state);
       return text(`Applied brand kit "${kit.name}"${clear_slide_overrides ? " and cleared slide overrides" : ""}.\n${summarize(project.state, project.id)}`);
     },
   );

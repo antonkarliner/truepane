@@ -134,3 +134,65 @@ describe("missing assets", () => {
     expect(internalizeAssets(document, () => null).settings.customFont).toBeNull();
   });
 });
+
+// A custom backdrop is the largest asset the app can hold and it is shared by
+// every slide that does not override it. Leaving it inline would rewrite those
+// megabytes into the document on every debounced save.
+describe("background images", () => {
+  const BACKDROP = dataUrl("image/jpeg", "backdrop-bytes");
+  const image = (source: { dataUrl: string }) => ({
+    source: { kind: "upload", id: "ignored", dataUrl: source.dataUrl, width: 3960, height: 2868 },
+    span: "strip",
+    fit: "cover",
+    opacity: 0.9,
+    scrim: 0.25,
+    scrimColor: "#101010",
+    meanLuminance: 0.31,
+  });
+
+  const withBackdrop = () =>
+    project({
+      settings: {
+        platform: "ios",
+        customFont: null,
+        background: { color: "#ffffff", image: image({ dataUrl: BACKDROP }) },
+      },
+    });
+
+  it("round-trips a background image without embedding its bytes", async () => {
+    const state = withBackdrop();
+    expect(state.settings.background.image?.source.kind).toBe("upload");
+    const { document, blobs } = await externalizeAssets(state);
+    expect(JSON.stringify(document)).not.toContain("base64");
+    expect(internalizeAssets(document, (id) => blobs.get(id) ?? null)).toEqual(state);
+  });
+
+  it("is reachable from referencedAssetIds, so the sweep cannot delete it", async () => {
+    const { document, blobs } = await externalizeAssets(withBackdrop());
+    const ids = referencedAssetIds(document);
+    for (const id of blobs.keys()) expect(ids.has(id)).toBe(true);
+  });
+
+  it("degrades to no image when the asset is gone, rather than a dead reference", async () => {
+    const { document } = await externalizeAssets(withBackdrop());
+    const state = internalizeAssets(document, () => null);
+    expect(state.settings.background.image).toBeUndefined();
+    expect(state.settings.background.color).toBe("#ffffff");
+  });
+
+  it("shares one asset between a slide override and the global background", async () => {
+    const state = normalizeAppState({
+      settings: {
+        platform: "ios",
+        customFont: null,
+        background: { image: image({ dataUrl: BACKDROP }) },
+      },
+      slides: [
+        { title: "One", subhead: "", background: { image: image({ dataUrl: BACKDROP }) } },
+        { title: "Two", subhead: "" },
+      ],
+    });
+    const { blobs } = await externalizeAssets(state);
+    expect(blobs.size).toBe(1);
+  });
+});

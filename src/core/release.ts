@@ -2,6 +2,7 @@ import { getImageAsset } from "./media";
 import { outputForSettings } from "./output";
 import type {
   AppState,
+  Background,
   ReleaseAssetComparison,
   ReleaseBaseline,
 } from "./types";
@@ -20,6 +21,26 @@ export async function sha256Hex(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * The background as it goes into a signature: everything verbatim except an
+ * uploaded image's bytes, which are dropped in favour of the content id that
+ * already sits beside them.
+ *
+ * A data URL here would be hashed once per slide x target x language — several
+ * megabytes of base64 per signature, for no information the id does not
+ * already carry. Different bytes hash to a different id, so a swapped
+ * background still shows up as changed in a changed-only export.
+ *
+ * A background with no image is returned untouched, so projects that predate
+ * this feature keep their existing signatures and stored baselines still match.
+ */
+function signatureBackground(background: Background): unknown {
+  const image = background.image;
+  if (!image || image.source.kind !== "upload") return background;
+  const { dataUrl: _bytes, ...source } = image.source;
+  return { ...background, image: { ...image, source } };
 }
 
 export function releaseAssetKey(target: string, output: string, language: string, slide: number): string {
@@ -72,7 +93,7 @@ export async function buildReleaseSignatures(
             subheadColor: slide.subheadColor ?? state.settings.subheadColor,
             subtitleScale: state.settings.subtitleScale,
             subtitleWeight: state.settings.subtitleWeight,
-            background: slide.background ?? state.settings.background,
+            background: signatureBackground(slide.background ?? state.settings.background),
             composition: slide.composition ?? state.settings.composition,
           },
         };

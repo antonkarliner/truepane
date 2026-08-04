@@ -8,6 +8,10 @@ export interface CanvasLike {
   width: number;
   height: number;
   getContext(contextId: "2d"): CanvasRenderingContext2D | null;
+  /** Present on HTMLCanvasElement and @napi-rs/canvas alike. Optional so a
+   * minimal canvas stand-in still satisfies the render path, which never
+   * encodes — only the background-image importer does. */
+  toDataURL?(type?: string, quality?: number): string;
 }
 
 /** A drawImage-able pixel source. `naturalWidth`/`naturalHeight` are present

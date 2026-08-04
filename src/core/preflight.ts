@@ -8,7 +8,7 @@ import {
 } from "./composition";
 import { getImageAsset } from "./media";
 import { getRenderFrame } from "./render";
-import type { AppState, Frame, Settings } from "./types";
+import type { AppState, Background, Frame, Settings } from "./types";
 
 export type PreflightIssueCode =
   | "missing-target-screenshot"
@@ -19,7 +19,9 @@ export type PreflightIssueCode =
   | "device-excessive-crop"
   | "unresolved-font"
   | "text-behind-device"
-  | "low-fill-text-contrast";
+  | "low-fill-text-contrast"
+  | "low-image-text-contrast"
+  | "background-image-aspect-mismatch";
 
 export interface PreflightIssue {
   code: PreflightIssueCode;
@@ -45,12 +47,41 @@ function luminance(rgb: [number, number, number]): number {
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
+function contrastOfLuminance(a: number, b: number): number {
+  const [bright, dark] = [a, b].sort((x, y) => y - x);
+  return (bright + 0.05) / (dark + 0.05);
+}
+
 function contrast(a: string, b: string): number | null {
   const left = parseColor(a);
   const right = parseColor(b);
   if (!left || !right) return null;
-  const [bright, dark] = [luminance(left), luminance(right)].sort((x, y) => y - x);
-  return (bright + 0.05) / (dark + 0.05);
+  return contrastOfLuminance(luminance(left), luminance(right));
+}
+
+/**
+ * Approximate luminance of everything behind the text once a background image
+ * is involved: the fill, blended toward the image's mean by `opacity`, then
+ * blended toward the scrim color by `scrim`.
+ *
+ * This is one number standing in for a whole photograph, which is exactly why
+ * the issue it raises is worded as an approximation. Measuring the real thing
+ * means rasterizing a slide, and `validateProject` must stay pure and
+ * synchronous so the MCP server can call it without a canvas.
+ */
+function backdropLuminance(background: Background): number | null {
+  const fill = parseColor(background.color);
+  if (!fill) return null;
+  const image = background.image;
+  if (!image) return luminance(fill);
+  const opacity = Math.min(1, Math.max(0, image.opacity));
+  let value = luminance(fill) * (1 - opacity) + image.meanLuminance * opacity;
+  const scrim = Math.min(1, Math.max(0, image.scrim));
+  if (scrim > 0) {
+    const scrimColor = parseColor(image.scrimColor || "#000000");
+    if (scrimColor) value = value * (1 - scrim) + luminance(scrimColor) * scrim;
+  }
+  return value;
 }
 
 function likelyTextOverflow(title: string, subhead: string, frame: Frame, width: number): boolean {
@@ -160,16 +191,47 @@ export function validateProject(state: AppState): PreflightIssue[] {
         }
         const background = slide.background ?? state.settings.background;
         const titleColor = slide.titleColor ?? state.settings.titleColor;
-        const ratio = contrast(background.color, titleColor);
-        if (ratio !== null && ratio < 3) {
-          issues.push({
-            ...base,
-            code: "low-fill-text-contrast",
-            severity: "warning",
-            message: background.shape === "none"
-              ? "Title contrast against the fill is low."
-              : "Title contrast against the base fill is low; patterned pixels may differ.",
-          });
+        const backgroundImage = background.image;
+        if (backgroundImage) {
+          // The image supersedes the fill behind the text, so reporting the
+          // fill's contrast here would be measuring pixels nobody sees. Only
+          // one of the two contrast issues is ever raised per slide.
+          const titleRgb = parseColor(titleColor);
+          const backdrop = backdropLuminance(background);
+          if (titleRgb && backdrop !== null && contrastOfLuminance(backdrop, luminance(titleRgb)) < 3) {
+            issues.push({
+              ...base,
+              code: "low-image-text-contrast",
+              severity: "warning",
+              message:
+                "Title contrast against the background image is low. This averages the whole image — bright or dark regions behind the text may differ. Raise the scrim to be sure.",
+            });
+          }
+          if (backgroundImage.source.kind === "upload") {
+            const { width, height } = backgroundImage.source;
+            const boxWidth = backgroundImage.span === "strip" ? frame.W * state.slides.length : frame.W;
+            const boxAspect = boxWidth / frame.H;
+            if (width && height && Math.abs(width / height - boxAspect) / boxAspect > 0.02) {
+              issues.push({
+                ...base,
+                code: "background-image-aspect-mismatch",
+                severity: "info",
+                message: `Background image is ${width}x${height}; this ${backgroundImage.span === "strip" ? "strip" : "slide"} is ${Math.round(boxWidth)}x${frame.H}. It will be ${backgroundImage.fit === "cover" ? "center-cropped to fill" : "letterboxed to fit"}.`,
+              });
+            }
+          }
+        } else {
+          const ratio = contrast(background.color, titleColor);
+          if (ratio !== null && ratio < 3) {
+            issues.push({
+              ...base,
+              code: "low-fill-text-contrast",
+              severity: "warning",
+              message: background.shape === "none"
+                ? "Title contrast against the fill is low."
+                : "Title contrast against the base fill is low; patterned pixels may differ.",
+            });
+          }
         }
       }
     }

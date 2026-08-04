@@ -10,7 +10,14 @@ import { bulkSlotKey, mapBulkImport, type BulkImportFile, type BulkImportProposa
 import { validateProject, type PreflightIssue } from "./core/preflight";
 import { applyBrandKit, brandKitFromSettings, type BrandKit } from "./core/brand-kit";
 import { compareRelease, createReleaseBaseline } from "./core/release";
-import { dimForSettings, getRenderFrame, paintSlide, paintStrip } from "./core/render";
+import {
+  dimForSettings,
+  getRenderFrame,
+  hasBackgroundImage,
+  paintSlide,
+  paintStrip,
+  registerBackgroundImage,
+} from "./core/render";
 import { mirrorSpannedMedia, spanDeviceAcrossPair, updateSpannedComposition } from "./core/composition";
 import { outputForSettings } from "./core/output";
 import { FONT_OPTIONS, defaultState } from "./core/constants";
@@ -23,9 +30,21 @@ import {
   storageMayBeEvicted,
   type StorageMode,
 } from "./storage/project";
-import { normalizeAppState, serializeTranslations } from "./core/normalize";
+import { normalizeAppState, normalizeBackground, serializeTranslations } from "./core/normalize";
+import {
+  backgroundImageFromUpload,
+  prepareBackgroundImage,
+} from "./core/background-image";
 import { getImageAsset, serializeMedia, setImageAsset } from "./core/media";
-import type { AppState, Background, ReleaseAssetComparison, Settings, Slide, SlideText } from "./core/types";
+import type {
+  AppState,
+  Background,
+  BackgroundImage,
+  ReleaseAssetComparison,
+  Settings,
+  Slide,
+  SlideText,
+} from "./core/types";
 import { applyTheme, initialTheme, type Theme } from "./theme";
 
 const HISTORY_LIMIT = 100;
@@ -71,6 +90,34 @@ function decodeImage(dataUrl: string | null | undefined): Promise<HTMLImageEleme
     img.onerror = () => resolve(null);
     img.src = dataUrl;
   });
+}
+
+/**
+ * Decode every uploaded background image a project references and hand it to
+ * the renderer's registry.
+ *
+ * paintSlide is synchronous and looks background images up by content id, so
+ * this has to finish *before* the state reaches a canvas — otherwise the first
+ * paint drops the backdrop and nothing re-triggers it.
+ */
+async function registerBackgroundImages(state: AppState): Promise<void> {
+  const backgrounds = [state.settings.background, ...state.slides.map((slide) => slide.background)];
+  await Promise.all(
+    backgrounds.map(async (background) => {
+      const source = background?.image?.source;
+      if (source?.kind !== "upload" || hasBackgroundImage(source.id)) return;
+      const image = await decodeImage(source.dataUrl);
+      if (image) registerBackgroundImage(source.id, image);
+    }),
+  );
+}
+
+// normalizeBackground runs only when the image layer is touched: it is the one
+// field with a "null means absent, not present-and-empty" rule, and running it
+// on every color-slider drag would be wasted work.
+function mergeBackground(base: Background, patch: Partial<Background>): Background {
+  const next = { ...base, ...patch };
+  return "image" in patch ? normalizeBackground(next) : next;
 }
 
 // Convert imageDataUrl strings back to HTMLImageElements for rendering — both
@@ -219,6 +266,7 @@ export function App() {
       const loaded = await loadProject();
       const slides = await hydrateImages(loaded.state.slides);
       const hydratedState = { ...loaded.state, slides };
+      await registerBackgroundImages(hydratedState);
       historyPast.current = [];
       historyFuture.current = [];
       historyCurrent.current = hydratedState;
@@ -411,7 +459,7 @@ export function App() {
   const updateBackground = useCallback((patch: Partial<Background>) => {
     setState((s) => ({
       ...s,
-      settings: { ...s.settings, background: { ...s.settings.background, ...patch } },
+      settings: { ...s.settings, background: mergeBackground(s.settings.background, patch) },
     }));
   }, []);
 
@@ -421,11 +469,37 @@ export function App() {
         const next = s.slides.slice();
         const slide = next[idx];
         const current = slide.background ?? s.settings.background;
-        next[idx] = { ...slide, background: { ...current, ...patch } };
+        next[idx] = { ...slide, background: mergeBackground(current, patch) };
         return { ...s, slides: next };
       });
     },
     [],
+  );
+
+  /**
+   * Turn a dropped file into a storable background image layer.
+   *
+   * Prepared against the whole strip — the largest box it could be painted
+   * into — so switching span to "Across strip" later never needs a re-import.
+   * Registers the decoded pixels before returning, so the caller can write the
+   * result straight into state and have the very next paint show it.
+   */
+  const importBackgroundImage = useCallback(
+    async (
+      source: HTMLImageElement,
+      span: BackgroundImage["span"],
+    ): Promise<{ image: BackgroundImage; warning: string | null }> => {
+      const dim = dimForSettings(state.settings);
+      const prepared = await prepareBackgroundImage(source, {
+        width: dim.W * Math.max(1, state.slides.length),
+        height: dim.H,
+      });
+      const decoded = await decodeImage(prepared.source.dataUrl);
+      if (!decoded) throw new Error("The re-encoded background image could not be decoded.");
+      registerBackgroundImage(prepared.source.id, decoded);
+      return { image: backgroundImageFromUpload(prepared, span), warning: prepared.warning };
+    },
+    [state.settings, state.slides.length],
   );
 
   // Write a partial translation for one slide/language, seeding from the source
@@ -642,7 +716,10 @@ export function App() {
   const renameBrandKit = (id: string, name: string) => {
     setBrandKits((kits) => kits.map((kit) => kit.id === id ? { ...kit, name: name.trim() || kit.name } : kit));
   };
-  const useBrandKit = (kit: BrandKit, clearOverrides: boolean) => {
+  const useBrandKit = async (kit: BrandKit, clearOverrides: boolean) => {
+    // A kit can carry a brand backdrop, and the renderer only paints images it
+    // has already been handed by content id.
+    await registerBackgroundImages({ settings: kit.style as unknown as Settings, slides: [] });
     setState((current) => applyBrandKit(current, kit, clearOverrides));
   };
   const deleteBrandKit = (id: string) => setBrandKits((kits) => kits.filter((kit) => kit.id !== id));
@@ -811,7 +888,9 @@ export function App() {
     const text = await file.text();
     const s = normalizeAppState(JSON.parse(text));
     const slides = await hydrateImages(s.slides);
-    setState({ ...s, slides });
+    const imported = { ...s, slides };
+    await registerBackgroundImages(imported);
+    setState(imported);
     setSelectedIndex(0);
   };
 
@@ -982,6 +1061,7 @@ export function App() {
         updateSettings={updateSettings}
         updateBackground={updateBackground}
         updateSlideBackground={(patch) => updateSlideBackground(selectedIndex, patch)}
+        importBackgroundImage={importBackgroundImage}
         selected={selected}
         updateSlide={(patch) => updateSlide(selectedIndex, patch)}
         deleteSelected={() => deleteSlide(selectedIndex)}
@@ -1037,6 +1117,7 @@ export function App() {
         selected={selected}
         updateSlide={(patch) => updateSlide(selectedIndex, patch)}
         updateSlideBackground={(patch) => updateSlideBackground(selectedIndex, patch)}
+        importBackgroundImage={importBackgroundImage}
         deleteSelected={() => deleteSlide(selectedIndex)}
         moveSelected={(dir) => moveSlide(selectedIndex, selectedIndex + dir)}
         activeLang={activeLang}
