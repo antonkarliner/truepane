@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   clampDevicePosition,
+  clampTextPosition,
   devicePolygon,
   normalizeComposition,
   pointInPolygon,
   resolveComposition,
   snapDevicePosition,
+  snapPosition,
+  textPolygon,
+  textSnapTargets,
   spanDeviceAcrossPair,
   updateSpannedComposition,
   mirrorSpannedMedia,
@@ -22,6 +26,35 @@ describe("composition", () => {
     expect(resolved.device.x * frame.W).toBeCloseTo(frame.BODY.x + frame.BODY.w / 2);
     expect(resolved.device.y * frame.H).toBeCloseTo(frame.BODY.y + frame.BODY.h / 2);
     expect(resolved.device).toMatchObject({ scale: 1, rotation: 0 });
+  });
+
+  // Rotated text loses legibility much faster than a rotated device, so the
+  // text limit is deliberately tighter than the device's ±20.
+  it("clamps text rotation tighter than device rotation", () => {
+    const composition = normalizeComposition({
+      preset: "classic",
+      text: { rotation: 40 },
+      device: { rotation: 40 },
+    });
+    expect(composition.text).toMatchObject({ rotation: 12 });
+    expect(composition.device).toMatchObject({ rotation: 20 });
+    expect(normalizeComposition({ preset: "classic" }).text?.rotation).toBeUndefined();
+    expect(resolveComposition({ preset: "classic" }, frame).text.rotation).toBe(0);
+  });
+
+  // The hit region must rotate the same way the painter does, or a tilted
+  // block would be grabbable somewhere it is not drawn.
+  it("rotates the text hit polygon about the block center", () => {
+    const bounds = { x: 100, y: 200, w: 400, h: 100 };
+    const flat = textPolygon(bounds, 0);
+    expect(flat[0]).toEqual({ x: 100, y: 200 });
+    expect(flat[2]).toEqual({ x: 500, y: 300 });
+    const tilted = textPolygon(bounds, 90);
+    // A quarter turn about (300, 250) swaps the box's extents.
+    expect(tilted[0].x).toBeCloseTo(350);
+    expect(tilted[0].y).toBeCloseTo(50);
+    expect(tilted[2].x).toBeCloseTo(250);
+    expect(tilted[2].y).toBeCloseTo(450);
   });
 
   it("clamps persisted rotation and scale", () => {
@@ -47,6 +80,37 @@ describe("composition", () => {
     const point = clampDevicePosition(-10, 10, resolved, frame);
     expect(point.x).toBeGreaterThan(-1);
     expect(point.y).toBeLessThan(2);
+  });
+
+  // Text is the readable payload — a drag that leaves only a sliver on canvas
+  // is never intentional, so more of it stays put than of the device.
+  it("keeps 35% of a dragged text block on canvas", () => {
+    const bounds = { x: 0, y: 0, w: frame.W * 0.5, h: frame.H * 0.2 };
+    const off = clampTextPosition(-10, 10, bounds, frame);
+    // Right/bottom edges of the block, still inside the canvas.
+    expect(off.x + 0.5).toBeCloseTo(0.35 * 0.5);
+    expect(off.y).toBeCloseTo(1 - 0.35 * 0.2);
+    // A block placed inside the canvas is untouched.
+    expect(clampTextPosition(0.1, 0.1, bounds, frame)).toEqual({ x: 0.1, y: 0.1 });
+  });
+
+  // A user dragging text near the frame's own margin means the margin: the
+  // composition should stay visually aligned with the preset it came from.
+  it("snaps a text block back onto the frame's text margins", () => {
+    const width = 0.5;
+    const bounds = { x: 0, y: 0, w: frame.W * width, h: frame.H * 0.2 };
+    const targets = textSnapTargets(bounds, frame);
+    const leftMargin = frame.TEXT.leftPad / frame.W;
+    const rightMargin = 1 - frame.TEXT.rightPad / frame.W - width;
+    expect(snapPosition(leftMargin + 0.008, 0.3, targets).x).toBeCloseTo(leftMargin);
+    expect(snapPosition(rightMargin - 0.008, 0.3, targets).x).toBeCloseTo(rightMargin);
+    // Centering the block is a target too, vertically and horizontally.
+    expect(snapPosition((1 - width) / 2 + 0.005, 0.4 - 0.005, targets)).toEqual({
+      x: (1 - width) / 2,
+      y: 0.4,
+    });
+    // Beyond the threshold nothing moves — the escape hatch stays usable.
+    expect(snapPosition(leftMargin + 0.05, 0.3, targets).x).toBeCloseTo(leftMargin + 0.05);
   });
 
   it("creates matching clipped halves while preserving each slide's text", () => {

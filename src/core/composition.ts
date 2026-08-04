@@ -41,6 +41,7 @@ function baseForPreset(preset: CompositionPreset, frame: Frame): ResolvedComposi
         y: preset === "editorial" ? 0.12 : 0.18,
         width: preset === "hero" ? 0.46 : 0.42,
         align,
+        rotation: 0,
       },
       device: {
         x: preset === "tilt-right" ? 0.72 : 0.76,
@@ -55,6 +56,7 @@ function baseForPreset(preset: CompositionPreset, frame: Frame): ResolvedComposi
     y: frame.TEXT.titleTop / frame.H,
     width: (frame.W - frame.TEXT.leftPad - frame.TEXT.rightPad) / frame.W,
     align: "left",
+    rotation: 0,
   };
   const classicDevice: DevicePlacement = {
     x: (frame.BODY.x + frame.BODY.w / 2) / frame.W,
@@ -66,27 +68,27 @@ function baseForPreset(preset: CompositionPreset, frame: Frame): ResolvedComposi
   if (preset === "hero") {
     return {
       preset,
-      text: { x: 0.12, y: 0.065, width: 0.76, align: "center" },
+      text: { x: 0.12, y: 0.065, width: 0.76, align: "center", rotation: 0 },
       device: { x: 0.5, y: 0.69, scale: 1.14, rotation: 0 },
     };
   }
   if (preset === "tilt-left") {
     return {
       preset,
-      text: { x: 0.085, y: 0.065, width: 0.79, align: "left" },
+      text: { x: 0.085, y: 0.065, width: 0.79, align: "left", rotation: 0 },
       device: { x: 0.59, y: 0.69, scale: 1.05, rotation: -6 },
     };
   }
   if (preset === "tilt-right") {
     return {
       preset,
-      text: { x: 0.125, y: 0.065, width: 0.79, align: "right" },
+      text: { x: 0.125, y: 0.065, width: 0.79, align: "right", rotation: 0 },
       device: { x: 0.41, y: 0.69, scale: 1.05, rotation: 6 },
     };
   }
   return {
     preset,
-    text: { x: 0.075, y: 0.055, width: 0.46, align: "left" },
+    text: { x: 0.075, y: 0.055, width: 0.46, align: "left", rotation: 0 },
     device: { x: 0.66, y: 0.69, scale: 0.86, rotation: 0 },
   };
 }
@@ -110,6 +112,9 @@ export function normalizeComposition(raw: unknown): Composition {
       ...(typeof textSrc.y === "number" ? { y: clamp(textSrc.y, -0.5, 1.5) } : {}),
       ...(typeof textSrc.width === "number" ? { width: clamp(textSrc.width, 0.2, 1.2) } : {}),
       ...(align ? { align } : {}),
+      ...(typeof textSrc.rotation === "number"
+        ? { rotation: clamp(textSrc.rotation, -12, 12) }
+        : {}),
     },
     device: {
       ...(typeof deviceSrc.x === "number" ? { x: clamp(deviceSrc.x, -0.5, 1.5) } : {}),
@@ -181,10 +186,119 @@ export function clampDevicePosition(
   };
 }
 
-export function snapDevicePosition(x: number, y: number, threshold = 0.012): Point {
+/** The painted text column, in canvas px (`TextBlockLayout["bounds"]`). */
+export interface TextBounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** The text box's four corners, rotated the way `paintText` rotates them. */
+export function textPolygon(bounds: TextBounds, rotation: number): Point[] {
+  const cx = bounds.x + bounds.w / 2;
+  const cy = bounds.y + bounds.h / 2;
+  const angle = (rotation * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [
+    { x: bounds.x, y: bounds.y },
+    { x: bounds.x + bounds.w, y: bounds.y },
+    { x: bounds.x + bounds.w, y: bounds.y + bounds.h },
+    { x: bounds.x, y: bounds.y + bounds.h },
+  ].map((p) => {
+    const x = p.x - cx;
+    const y = p.y - cy;
+    return { x: cx + x * cos - y * sin, y: cy + x * sin + y * cos };
+  });
+}
+
+/**
+ * Fraction of the text block hidden behind the device, 0..1.
+ *
+ * `paintSlide` draws text before the device, so any overlap is text the user
+ * cannot read. Free placement makes it easy to park a headline under the phone
+ * by accident — on canvas the drag outline stays visible while the text itself
+ * disappears.
+ *
+ * Sampled on a coarse grid rather than solved analytically: both shapes are
+ * convex quads, the result only drives a warning threshold, and sampling keeps
+ * rotation handling free.
+ */
+export function textCoveredByDevice(
+  bounds: TextBounds,
+  rotation: number,
+  composition: ResolvedComposition,
+  frame: Frame,
+  steps = 5,
+): number {
+  if (bounds.w <= 0 || bounds.h <= 0) return 0;
+  const device = devicePolygon(composition, frame);
+  const corners = textPolygon(bounds, rotation);
+  // Bilinear interpolation across the (possibly rotated) text quad.
+  const [tl, tr, br, bl] = corners;
+  let covered = 0;
+  let total = 0;
+  for (let i = 0; i < steps; i++) {
+    const v = (i + 0.5) / steps;
+    for (let j = 0; j < steps; j++) {
+      const u = (j + 0.5) / steps;
+      const top = { x: tl.x + (tr.x - tl.x) * u, y: tl.y + (tr.y - tl.y) * u };
+      const bottom = { x: bl.x + (br.x - bl.x) * u, y: bl.y + (br.y - bl.y) * u };
+      const point = { x: top.x + (bottom.x - top.x) * v, y: top.y + (bottom.y - top.y) * v };
+      total++;
+      if (pointInPolygon(point, device)) covered++;
+    }
+  }
+  return total ? covered / total : 0;
+}
+
+/**
+ * Keep a fraction of the text block on canvas. Text is the readable payload,
+ * so the default keeps more of it visible than the device's 0.2 — a title
+ * dragged 90% off the edge is never intentional.
+ */
+export function clampTextPosition(
+  x: number,
+  y: number,
+  bounds: TextBounds,
+  frame: Frame,
+  visibleFraction = 0.35,
+): Point {
+  const w = bounds.w / frame.W;
+  const h = bounds.h / frame.H;
   return {
-    x: Math.abs(x - 0.5) <= threshold ? 0.5 : x,
-    y: Math.abs(y - 0.5) <= threshold ? 0.5 : y,
+    x: clamp(x, -w * (1 - visibleFraction), 1 - w * visibleFraction),
+    y: clamp(y, -h * (1 - visibleFraction), 1 - h * visibleFraction),
+  };
+}
+
+export function snapPosition(
+  x: number,
+  y: number,
+  targets: { x: number[]; y: number[] },
+  threshold = 0.012,
+): Point {
+  const nearest = (value: number, candidates: number[]) =>
+    candidates.find((candidate) => Math.abs(value - candidate) <= threshold) ?? value;
+  return { x: nearest(x, targets.x), y: nearest(y, targets.y) };
+}
+
+export function snapDevicePosition(x: number, y: number, threshold = 0.012): Point {
+  return snapPosition(x, y, { x: [0.5], y: [0.5] }, threshold);
+}
+
+/**
+ * Snap targets for the top-left of a text block: the frame's left and right
+ * text margins (so a dragged block re-aligns with the preset it came from),
+ * plus horizontal and vertical centering of the block itself.
+ */
+export function textSnapTargets(bounds: TextBounds, frame: Frame): { x: number[]; y: number[] } {
+  const w = bounds.w / frame.W;
+  const h = bounds.h / frame.H;
+  return {
+    x: [frame.TEXT.leftPad / frame.W, 1 - frame.TEXT.rightPad / frame.W - w, (1 - w) / 2],
+    y: [(1 - h) / 2],
   };
 }
 

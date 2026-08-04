@@ -1,8 +1,14 @@
 import { FONT_OPTIONS } from "./constants";
-import { devicePolygon, resolveComposition } from "./composition";
+import {
+  devicePolygon,
+  resolveComposition,
+  textCoveredByDevice,
+  type ResolvedComposition,
+  type TextBounds,
+} from "./composition";
 import { getImageAsset } from "./media";
 import { getRenderFrame } from "./render";
-import type { AppState, Frame } from "./types";
+import type { AppState, Frame, Settings } from "./types";
 
 export type PreflightIssueCode =
   | "missing-target-screenshot"
@@ -12,6 +18,7 @@ export type PreflightIssueCode =
   | "text-block-overflow"
   | "device-excessive-crop"
   | "unresolved-font"
+  | "text-behind-device"
   | "low-fill-text-contrast";
 
 export interface PreflightIssue {
@@ -50,6 +57,36 @@ function likelyTextOverflow(title: string, subhead: string, frame: Frame, width:
   const titleCapacity = Math.max(12, Math.floor((width * frame.W) / (frame.TEXT.titleFontSize * 0.54))) * 2;
   const subCapacity = Math.max(16, Math.floor((width * frame.W) / (frame.TEXT.subheadFontSize * 0.52))) * 2;
   return title.length > titleCapacity || subhead.length > subCapacity;
+}
+
+// The painted text bounds need a canvas to measure, which preflight
+// deliberately does not have (it must stay pure and synchronous for the MCP
+// server). This estimates them from the same characters-per-line arithmetic
+// `likelyTextOverflow` uses above, so the two checks can never disagree about
+// how much text fits on a line.
+function estimatedTextBounds(
+  title: string,
+  subhead: string,
+  placement: ResolvedComposition["text"],
+  frame: Frame,
+  settings: Settings,
+): TextBounds {
+  const T = frame.TEXT;
+  const titleScale = settings.titleScale ?? 1;
+  const subScale = settings.subtitleScale ?? 1;
+  const w = placement.width * frame.W;
+  const lineCount = (text: string, perChar: number) => {
+    const capacity = Math.max(1, Math.floor(w / perChar));
+    return Math.max(1, Math.min(4, Math.ceil(text.length / capacity)));
+  };
+  const titleH = title
+    ? lineCount(title, T.titleFontSize * titleScale * 0.54) * T.titleLineHeight * titleScale
+    : 0;
+  const subH = subhead
+    ? lineCount(subhead, T.subheadFontSize * subScale * 0.52) * T.subheadLineHeight * subScale
+    : 0;
+  const gap = titleH && subH ? T.titleToSubheadGap : 0;
+  return { x: placement.x * frame.W, y: placement.y * frame.H, w, h: titleH + gap + subH };
 }
 
 export function validateProject(state: AppState): PreflightIssue[] {
@@ -106,6 +143,17 @@ export function validateProject(state: AppState): PreflightIssue[] {
         const visibleH = Math.max(0, Math.min(frame.H, maxY) - Math.max(0, minY));
         if ((visibleW * visibleH) / area < 0.8) {
           issues.push({ ...base, code: "device-excessive-crop", severity: "warning", message: "More than 20% of the device is outside the output." });
+        }
+        // The device is painted over the text, so overlap is unreadable text.
+        const textBounds = estimatedTextBounds(title, subhead, composition.text, frame, state.settings);
+        const hidden = textCoveredByDevice(textBounds, composition.text.rotation ?? 0, composition, frame);
+        if (hidden > 0.25) {
+          issues.push({
+            ...base,
+            code: "text-behind-device",
+            severity: "warning",
+            message: `About ${Math.round(hidden * 100)}% of the text sits behind the device and will not be readable (estimated from text length).`,
+          });
         }
         if (!knownFonts.has(font)) {
           issues.push({ ...base, code: "unresolved-font", severity: "warning", message: `Font "${font}" is not available in this project.` });

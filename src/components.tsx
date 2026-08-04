@@ -8,15 +8,21 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { dimForSettings, getRenderFrame, paintSlide } from "./core/render";
+import { dimForSettings, getRenderFrame, layoutTextBlock, paintSlide } from "./core/render";
 import {
   clampDevicePosition,
+  clampTextPosition,
   COMPOSITION_PRESETS,
   devicePolygon,
   normalizeComposition,
   pointInPolygon,
   resolveComposition,
   snapDevicePosition,
+  snapPosition,
+  textPolygon,
+  textSnapTargets,
+  type Point,
+  type TextBounds,
 } from "./core/composition";
 import type { Composition, OutputSpec, RingLayout, Settings, Slide, TextAlign } from "./core/types";
 
@@ -24,6 +30,17 @@ declare global {
   interface Window {
     EyeDropper?: { new (): { open: () => Promise<{ sRGBHex: string }> } };
   }
+}
+
+// What "Arrange on canvas" is currently acting on.
+type ArrangeTarget = "device" | "text";
+
+// Scratch context for measuring only — text layout needs measureText, and
+// borrowing the preview's own context would leave its font state behind.
+let measureCanvas: HTMLCanvasElement | null = null;
+function measureContext(): CanvasRenderingContext2D {
+  if (!measureCanvas) measureCanvas = document.createElement("canvas");
+  return measureCanvas.getContext("2d")!;
 }
 
 // ---------------------------------------------------------------------------
@@ -62,12 +79,17 @@ export function SlidePreview({
     pointerId: number;
     startX: number;
     startY: number;
-    deviceX: number;
-    deviceY: number;
+    originX: number;
+    originY: number;
+    target: ArrangeTarget;
+    textBounds: TextBounds;
     base: Composition;
   } | null>(null);
   const [dragComposition, setDragComposition] = useState<Composition | null>(null);
   const dragCompositionRef = useRef<Composition | null>(null);
+  // Outlined while arranging, and the target arrow keys nudge. Follows the
+  // pointer so it is discoverable that the text block is draggable too.
+  const [arrangeTarget, setArrangeTarget] = useState<ArrangeTarget>("device");
 
   // In eyedrop mode a click samples the pixel under the cursor (cross-browser
   // fallback for the native EyeDropper API); otherwise it selects the slide.
@@ -111,44 +133,77 @@ export function SlidePreview({
     };
   };
 
+  // Frame, resolved placements and the painted text box for one composition.
+  // The text box comes from the painter's own layout, so the drag region can
+  // never disagree with the pixels.
+  const arrangeGeometry = (composition: Composition) => {
+    const frame = getRenderFrame(settings.platform || "ios", settings.output);
+    const resolved = resolveComposition(composition, frame);
+    const { bounds } = layoutTextBlock(measureContext(), { ...slide, composition }, settings, frame);
+    return { frame, resolved, bounds };
+  };
+
+  // The device is painted last, so it is visually on top and wins an overlap.
+  const targetAt = (
+    point: Point,
+    geometry: ReturnType<typeof arrangeGeometry>,
+  ): ArrangeTarget | null => {
+    if (pointInPolygon(point, devicePolygon(geometry.resolved, geometry.frame))) return "device";
+    return pointInPolygon(point, textPolygon(geometry.bounds, geometry.resolved.text.rotation))
+      ? "text"
+      : null;
+  };
+
   const startArrange = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!arranging || !selected || e.button !== 0 || !onCompositionChange) return;
-    const frame = getRenderFrame(settings.platform || "ios", settings.output);
     const base = normalizeComposition(slide.composition ?? settings.composition);
-    const resolved = resolveComposition(base, frame);
-    if (!pointInPolygon(pointOnCanvas(e), devicePolygon(resolved, frame))) return;
+    const geometry = arrangeGeometry(base);
+    const target = targetAt(pointOnCanvas(e), geometry);
+    if (!target) return;
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
+    setArrangeTarget(target);
+    const placement = target === "device" ? geometry.resolved.device : geometry.resolved.text;
     dragRef.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
-      deviceX: resolved.device.x,
-      deviceY: resolved.device.y,
+      originX: placement.x,
+      originY: placement.y,
+      target,
+      textBounds: geometry.bounds,
       base,
     };
   };
 
   const moveArrange = (e: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    if (!drag || drag.pointerId !== e.pointerId) return;
+    if (!drag || drag.pointerId !== e.pointerId) {
+      // Not dragging: highlight whatever is under the pointer.
+      if (!drag && arranging && selected && onCompositionChange) {
+        const base = normalizeComposition(slide.composition ?? settings.composition);
+        const target = targetAt(pointOnCanvas(e), arrangeGeometry(base));
+        if (target) setArrangeTarget(target);
+      }
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     const rect = canvasRef.current!.getBoundingClientRect();
     const frame = getRenderFrame(settings.platform || "ios", settings.output);
-    const current = resolveComposition(drag.base, frame);
-    let next = clampDevicePosition(
-      drag.deviceX + (e.clientX - drag.startX) / rect.width,
-      drag.deviceY + (e.clientY - drag.startY) / rect.height,
-      current,
-      frame,
-    );
-    if (!e.altKey) next = snapDevicePosition(next.x, next.y);
-    const composition = {
-      ...drag.base,
-      device: { ...drag.base.device, x: next.x, y: next.y },
-    };
+    const x = drag.originX + (e.clientX - drag.startX) / rect.width;
+    const y = drag.originY + (e.clientY - drag.startY) / rect.height;
+    let composition: Composition;
+    if (drag.target === "device") {
+      let next = clampDevicePosition(x, y, resolveComposition(drag.base, frame), frame);
+      if (!e.altKey) next = snapDevicePosition(next.x, next.y);
+      composition = { ...drag.base, device: { ...drag.base.device, x: next.x, y: next.y } };
+    } else {
+      let next = clampTextPosition(x, y, drag.textBounds, frame);
+      if (!e.altKey) next = snapPosition(next.x, next.y, textSnapTargets(drag.textBounds, frame));
+      composition = { ...drag.base, text: { ...drag.base.text, x: next.x, y: next.y } };
+    }
     dragCompositionRef.current = composition;
     setDragComposition(composition);
   };
@@ -168,11 +223,11 @@ export function SlidePreview({
   const nudge = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!arranging || !selected || !onCompositionChange) return;
     const delta = e.shiftKey ? 10 : 1;
-    const frame = getRenderFrame(settings.platform || "ios", settings.output);
     const base = normalizeComposition(slide.composition ?? settings.composition);
-    const resolved = resolveComposition(base, frame);
-    let x = resolved.device.x;
-    let y = resolved.device.y;
+    const { frame, resolved, bounds } = arrangeGeometry(base);
+    const placement = arrangeTarget === "device" ? resolved.device : resolved.text;
+    let x = placement.x;
+    let y = placement.y;
     if (e.key === "ArrowLeft") x -= delta / frame.W;
     else if (e.key === "ArrowRight") x += delta / frame.W;
     else if (e.key === "ArrowUp") y -= delta / frame.H;
@@ -180,8 +235,13 @@ export function SlidePreview({
     else return;
     e.preventDefault();
     e.stopPropagation();
-    const next = clampDevicePosition(x, y, resolved, frame);
-    onCompositionChange({ ...base, device: { ...base.device, ...next } });
+    if (arrangeTarget === "device") {
+      const next = clampDevicePosition(x, y, resolved, frame);
+      onCompositionChange({ ...base, device: { ...base.device, ...next } });
+    } else {
+      const next = clampTextPosition(x, y, bounds, frame);
+      onCompositionChange({ ...base, text: { ...base.text, ...next } });
+    }
   };
 
   return (
@@ -221,6 +281,24 @@ export function SlidePreview({
           <div className="arrange-guides" aria-hidden="true">
             <span className="arrange-guide arrange-guide--x" />
             <span className="arrange-guide arrange-guide--y" />
+            {(() => {
+              const geometry = arrangeGeometry(
+                normalizeComposition(effectiveSlide.composition ?? settings.composition),
+              );
+              const outline =
+                arrangeTarget === "text"
+                  ? textPolygon(geometry.bounds, geometry.resolved.text.rotation)
+                  : devicePolygon(geometry.resolved, geometry.frame);
+              return (
+                <svg
+                  className="arrange-outline"
+                  viewBox={`0 0 ${dim.W} ${dim.H}`}
+                  preserveAspectRatio="none"
+                >
+                  <polygon points={outline.map((p) => `${p.x},${p.y}`).join(" ")} />
+                </svg>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -310,7 +388,8 @@ export function CompositionControls({
           <div className="control-group">
             <div className="field__label">Canvas placement</div>
             <div className="field__hint control-group__hint">
-              Drag the device directly on the preview for quick visual positioning.
+              Drag the device or the text block directly on the preview for quick visual
+              positioning.
             </div>
             <button className={"ghost small arrange-btn" + (arranging ? " active" : "")} onClick={onToggleArrange}>
               {arranging ? "Done arranging" : "Arrange on canvas"}
@@ -345,6 +424,28 @@ export function CompositionControls({
             <Field label={`Angle · ${resolved.device.rotation.toFixed(0)}°`}>
               <input className="slider" type="range" min="-20" max="20" step="1"
                 value={resolved.device.rotation} onChange={(e) => patchDevice({ rotation: Number(e.target.value) })} />
+            </Field>
+          </div>
+          <div className="control-group">
+            <div className="field__label">Text placement</div>
+            <div className="field__hint control-group__hint">
+              Move the whole text block and set how wide it wraps.
+            </div>
+            <Field label={`Horizontal · ${Math.round(resolved.text.x * 100)}%`}>
+              <input className="slider" type="range" min="-0.4" max="1.4" step="0.005"
+                value={resolved.text.x} onChange={(e) => patchText({ x: Number(e.target.value) })} />
+            </Field>
+            <Field label={`Vertical · ${Math.round(resolved.text.y * 100)}%`}>
+              <input className="slider" type="range" min="-0.4" max="1.4" step="0.005"
+                value={resolved.text.y} onChange={(e) => patchText({ y: Number(e.target.value) })} />
+            </Field>
+            <Field label={`Width · ${Math.round(resolved.text.width * 100)}%`}>
+              <input className="slider" type="range" min="0.2" max="1.2" step="0.005"
+                value={resolved.text.width} onChange={(e) => patchText({ width: Number(e.target.value) })} />
+            </Field>
+            <Field label={`Angle · ${resolved.text.rotation.toFixed(0)}°`}>
+              <input className="slider" type="range" min="-12" max="12" step="1"
+                value={resolved.text.rotation} onChange={(e) => patchText({ rotation: Number(e.target.value) })} />
             </Field>
           </div>
           <div className="control-group">

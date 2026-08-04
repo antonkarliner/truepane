@@ -100,6 +100,7 @@ const compositionSchema = z.object({
     y: z.number().min(-0.5).max(1.5).optional(),
     width: z.number().min(0.2).max(1.2).optional(),
     align: z.enum(["left", "center", "right"]).optional(),
+    rotation: z.number().min(-12).max(12).optional(),
   }).partial().optional(),
   device: z.object({
     x: z.number().min(-0.5).max(1.5).optional(),

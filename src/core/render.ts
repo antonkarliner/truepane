@@ -1013,71 +1013,152 @@ function applyWeightAxis(ctx: CanvasRenderingContext2D, weight: number): void {
   }
 }
 
-function paintText(
+// One run of text (title or subhead) as laid out: where each line starts, in
+// which direction, and with which font.
+interface TextRun {
+  lines: string[];
+  /** Anchor x for fillText, already resolved for `align`. */
+  x: number;
+  /** Top y of the first line (textBaseline is "top"). */
+  y: number;
+  align: "left" | "center" | "right";
+  rtl: boolean;
+  font: string;
+  weight: number;
+  color: string;
+  lineHeight: number;
+}
+
+export interface TextBlockLayout {
+  /** The painted text column, in canvas px: title top through subhead bottom. */
+  bounds: { x: number; y: number; w: number; h: number };
+  /** Rotation of the whole block about the center of `bounds`, in degrees. */
+  rotation: number;
+  titleLines: string[];
+  subheadLines: string[];
+  title: TextRun;
+  subhead: TextRun | null;
+}
+
+// Geometry half of paintText. Split out so the drag hit-region in the editor
+// measures exactly what the painter draws — a ctx is required because line
+// breaking depends on measureText.
+export function layoutTextBlock(
   ctx: CanvasRenderingContext2D,
   slide: Slide,
   settings: Settings,
   F: Frame,
-): void {
+): TextBlockLayout {
   const T = F.TEXT;
   const composition = resolveComposition(slide.composition ?? settings.composition, F);
   const placement = composition.text;
   const maxW = placement.width * F.W;
   const font = familyToCss(settings.fontFamily || "Inter");
   const unit = F.geometryScale !== undefined ? 1 : F.W / getFrame(F.id).W;
-  ctx.textBaseline = "top";
+  const left = placement.x * F.W;
+  const top = placement.y * F.H;
+  const alignedX = (align: "left" | "center" | "right") =>
+    align === "right" ? left + maxW : align === "center" ? left + maxW / 2 : left;
+  const resolveAlign = (rtl: boolean) =>
+    rtl && placement.align === "left"
+      ? "right"
+      : !rtl && placement.align === "right"
+        ? "right"
+        : placement.align;
 
   const title = slide.title || "";
   const titleRtl = RTL_CHARS.test(title);
   const titleScale = settings.titleScale ?? 1;
   const titleWeight = settings.titleWeight ?? T.titleWeight;
-  ctx.fillStyle = slide.titleColor ?? (settings.titleColor || "#1a1612");
-  ctx.font = `${titleWeight} ${Math.round(T.titleFontSize * titleScale)}px ${font}`;
+  const titleFont = `${titleWeight} ${Math.round(T.titleFontSize * titleScale)}px ${font}`;
+  const titleAlign = resolveAlign(titleRtl);
+  ctx.font = titleFont;
   applyWeightAxis(ctx, titleWeight);
-  const titleAlign =
-    titleRtl && placement.align === "left"
-      ? "right"
-      : !titleRtl && placement.align === "right"
-        ? "right"
-        : placement.align;
-  ctx.textAlign = titleAlign;
-  ctx.direction = titleRtl ? "rtl" : "ltr";
-  const left = placement.x * F.W;
-  const alignedX = (align: "left" | "center" | "right") =>
-    align === "right" ? left + maxW : align === "center" ? left + maxW / 2 : left;
-  const titleX = alignedX(titleAlign);
   const titleLines = wrapText(ctx, title, maxW);
-  let y = placement.y * F.H;
-  for (const line of titleLines) {
-    ctx.fillText(line, titleX, y);
-    y += Math.round(T.titleLineHeight * titleScale);
-  }
-  const titleBottom = y;
+  const titleLineHeight = Math.round(T.titleLineHeight * titleScale);
+  const titleBottom = top + titleLines.length * titleLineHeight;
 
+  let subhead: TextRun | null = null;
+  let bottom = titleBottom;
   if (slide.subhead) {
     const subRtl = RTL_CHARS.test(slide.subhead);
     const scale = settings.subtitleScale ?? 1;
     const subheadWeight = settings.subtitleWeight ?? T.subheadWeight;
-    ctx.fillStyle = slide.subheadColor ?? (settings.subheadColor || "rgba(26,22,18,0.62)");
-    ctx.font = `${subheadWeight} ${Math.round(T.subheadFontSize * scale)}px ${font}`;
+    const subFont = `${subheadWeight} ${Math.round(T.subheadFontSize * scale)}px ${font}`;
+    const subAlign = resolveAlign(subRtl);
+    ctx.font = subFont;
     applyWeightAxis(ctx, subheadWeight);
-    const subAlign =
-      subRtl && placement.align === "left"
-        ? "right"
-        : !subRtl && placement.align === "right"
-          ? "right"
-          : placement.align;
-    ctx.textAlign = subAlign;
-    ctx.direction = subRtl ? "rtl" : "ltr";
-    const subX = alignedX(subAlign);
     const subLines = wrapText(ctx, slide.subhead, maxW);
-    const presetSubheadTop = placement.y * F.H + (T.subheadTop - T.titleTop);
-    let sy = Math.max(presetSubheadTop, titleBottom + 30 * unit);
-    for (const line of subLines) {
-      ctx.fillText(line, subX, sy);
-      sy += Math.round(T.subheadLineHeight * scale);
-    }
+    const subLineHeight = Math.round(T.subheadLineHeight * scale);
+    const presetSubheadTop = top + (T.subheadTop - T.titleTop);
+    const sy = Math.max(presetSubheadTop, titleBottom + 30 * unit);
+    subhead = {
+      lines: subLines,
+      x: alignedX(subAlign),
+      y: sy,
+      align: subAlign,
+      rtl: subRtl,
+      font: subFont,
+      weight: subheadWeight,
+      color: slide.subheadColor ?? (settings.subheadColor || "rgba(26,22,18,0.62)"),
+      lineHeight: subLineHeight,
+    };
+    bottom = sy + subLines.length * subLineHeight;
   }
+
+  return {
+    bounds: { x: left, y: top, w: maxW, h: Math.max(0, bottom - top) },
+    rotation: placement.rotation,
+    titleLines,
+    subheadLines: subhead ? subhead.lines : [],
+    title: {
+      lines: titleLines,
+      x: alignedX(titleAlign),
+      y: top,
+      align: titleAlign,
+      rtl: titleRtl,
+      font: titleFont,
+      weight: titleWeight,
+      color: slide.titleColor ?? (settings.titleColor || "#1a1612"),
+      lineHeight: titleLineHeight,
+    },
+    subhead,
+  };
+}
+
+function paintRun(ctx: CanvasRenderingContext2D, run: TextRun): void {
+  ctx.fillStyle = run.color;
+  ctx.font = run.font;
+  applyWeightAxis(ctx, run.weight);
+  ctx.textAlign = run.align;
+  ctx.direction = run.rtl ? "rtl" : "ltr";
+  let y = run.y;
+  for (const line of run.lines) {
+    ctx.fillText(line, run.x, y);
+    y += run.lineHeight;
+  }
+}
+
+function paintText(
+  ctx: CanvasRenderingContext2D,
+  slide: Slide,
+  settings: Settings,
+  F: Frame,
+): void {
+  ctx.textBaseline = "top";
+  const layout = layoutTextBlock(ctx, slide, settings, F);
+  const tilted = layout.rotation !== 0;
+  if (tilted) {
+    const cx = layout.bounds.x + layout.bounds.w / 2;
+    const cy = layout.bounds.y + layout.bounds.h / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((layout.rotation * Math.PI) / 180);
+    ctx.translate(-cx, -cy);
+  }
+  paintRun(ctx, layout.title);
+  if (layout.subhead) paintRun(ctx, layout.subhead);
+  if (tilted) ctx.restore();
 
   // Restore defaults so later draws sharing this context are unaffected.
   ctx.textAlign = "left";

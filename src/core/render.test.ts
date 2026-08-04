@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { RING_LAYOUTS, defineFrame, getFrame, getLayout, mulberry32, wrapText } from "./render";
-import type { Frame } from "./types";
+import {
+  RING_LAYOUTS,
+  defineFrame,
+  getFrame,
+  getLayout,
+  layoutTextBlock,
+  mulberry32,
+  wrapText,
+} from "./render";
+import { defaultState } from "./constants";
+import type { Composition, Frame, Slide } from "./types";
 
 // A fake 2D context whose text width is proportional to string length, so the
 // wrapping logic is deterministic without a real canvas.
@@ -88,5 +97,63 @@ describe("concentric-corner invariant", () => {
       SCREEN: { x: 0, y: 765, w: 930, h: 2000, r: 132 },
     } as Frame;
     expect(() => defineFrame(bad)).toThrow(/concentric-corner invariant/);
+  });
+});
+
+// The text hit-region in the editor is derived from this layout, so the box it
+// reports must be the box the painter fills — no phantom space for text that
+// is not there, and no lag behind wrapping.
+describe("layoutTextBlock", () => {
+  const frame = getFrame("ios");
+  const settings = defaultState().settings;
+  const slideWith = (title: string, subhead: string, composition?: Composition): Slide => ({
+    title,
+    subhead,
+    image: null,
+    imageDataUrl: null,
+    composition,
+  });
+
+  it("stops the box at the title bottom when there is no subhead", () => {
+    const layout = layoutTextBlock(fakeCtx, slideWith("aa", ""), settings, frame);
+    expect(layout.titleLines).toEqual(["aa"]);
+    expect(layout.subheadLines).toEqual([]);
+    expect(layout.bounds.h).toBeCloseTo(frame.TEXT.titleLineHeight);
+  });
+
+  it("grows the box by one line height per wrapped title line", () => {
+    // Narrowest column normalizeComposition allows: 0.2 * 1320 = 264px, and
+    // the fake ctx measures 10px per character.
+    const narrow: Composition = { preset: "classic", text: { width: 0.2 } };
+    const one = layoutTextBlock(fakeCtx, slideWith("aaaaaaaaaa", "", narrow), settings, frame);
+    const two = layoutTextBlock(
+      fakeCtx,
+      slideWith("aaaaaaaaaa bbbbbbbbbb cccccccccc", "", narrow),
+      settings,
+      frame,
+    );
+    expect(one.titleLines).toHaveLength(1);
+    expect(two.titleLines).toHaveLength(2);
+    expect(two.bounds.h - one.bounds.h).toBeCloseTo(frame.TEXT.titleLineHeight);
+  });
+
+  it("extends the box to the subhead bottom", () => {
+    const titleOnly = layoutTextBlock(fakeCtx, slideWith("aa", ""), settings, frame);
+    const withSub = layoutTextBlock(fakeCtx, slideWith("aa", "bb"), settings, frame);
+    expect(withSub.subheadLines).toEqual(["bb"]);
+    expect(withSub.subhead!.y).toBeCloseTo(
+      withSub.bounds.y + (frame.TEXT.subheadTop - frame.TEXT.titleTop),
+    );
+    expect(withSub.bounds.h).toBeCloseTo(
+      frame.TEXT.subheadTop - frame.TEXT.titleTop + frame.TEXT.subheadLineHeight,
+    );
+    expect(withSub.bounds.h).toBeGreaterThan(titleOnly.bounds.h);
+  });
+
+  it("reports the placed text column, so the box tracks x and width", () => {
+    const composition: Composition = { preset: "classic", text: { x: 0.2, width: 0.5 } };
+    const layout = layoutTextBlock(fakeCtx, slideWith("aa", "", composition), settings, frame);
+    expect(layout.bounds.x).toBeCloseTo(0.2 * frame.W);
+    expect(layout.bounds.w).toBeCloseTo(0.5 * frame.W);
   });
 });
