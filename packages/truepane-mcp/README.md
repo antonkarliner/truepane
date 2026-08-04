@@ -20,7 +20,18 @@ translation are its own judgment calls.
 - Preview and apply a screenshot directory deterministically with
   `import_screenshots`; conflicts never overwrite silently.
 - Place text and devices with normalized coordinates, resize mockups, align copy,
-  and rotate devices from −20° to +20°.
+  rotate devices from −20° to +20°, and tilt the text block from −12° to +12°.
+- Set a custom background image per slide, across every slide, or as one long
+  backdrop sliced across the whole strip, with `set_background_image`. Tune
+  opacity, scrim, and fit afterwards; a scrim keeps titles readable over a photo.
+  A backdrop can also be derived from the slide's own screenshot, which costs no
+  storage at all.
+- Compose backgrounds parametrically with the `custom` shape family: six
+  primitives (ring, disc, arc, triangle, bar, blob) across five arrangements
+  (scatter, grid, row, radial, wave), with size, jitter, rotation, spacing,
+  phase, stroke, and an opacity ramp. It is data, not code — deterministic from
+  a seed, safe to share in a project file, and laid out in strip-space so a
+  multi-slide background flows continuously.
 - Span one synchronized device across two adjacent slides. Both clipped halves
   keep their screenshot, position, scale, and rotation linked.
 - Save and apply portable brand kits without carrying screenshots or project data.
@@ -70,7 +81,9 @@ client's `mcpServers` block:
    `targets` for a multi-platform project.
 3. Attach target/locale media with **`set_screenshots`**, or preview a prepared
    directory with **`import_screenshots`** and explicitly apply the reviewed map.
-4. Use **`set_style`** for typography, colors, backgrounds, and composition.
+4. Use **`set_style`** for typography, colors, backgrounds, and composition. For
+   a background photo or a strip-wide backdrop, call **`set_background_image`**
+   with a local file first, then tune it via `set_style background.image`.
    With `slide_index`, composition is slide-specific; device position is normalized
    canvas space, scale is `0.4..1.6`, and rotation is `−20..20`.
    **`suggest_palette_from_screenshot`** provides a local-math starting palette.
@@ -89,6 +102,7 @@ client's `mcpServers` block:
 | Create and edit content | `create_project`, `set_slides`, `set_screenshots`, `set_translations` |
 | Bulk and multi-target media | `import_screenshots`, `set_screenshots` |
 | Style and composition | `set_style`, `suggest_palette_from_screenshot`, `span_device_across_slides` |
+| Background imagery | `set_background_image`, `set_style` with `background.image` |
 | Reusable visual systems | `export_brand_kit`, `apply_brand_kit` |
 | Native, feature, and custom canvases | `set_output`, `render` |
 | Release safety | `validate_project`, `compare_release`, `set_release_baseline`, `render` with `changed_only` |

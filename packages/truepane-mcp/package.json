@@ -1,8 +1,8 @@
 {
   "name": "truepane-mcp",
-  "version": "0.1.11",
+  "version": "0.2.0",
   "mcpName": "io.github.antonkarliner/truepane",
-  "description": "Local MCP server for complete App Store and Google Play screenshot sets: multi-target media, composition, localization, preflight, brand kits, custom outputs, and release updates.",
+  "description": "Local MCP server for complete App Store and Google Play screenshot sets: multi-target media, composition, background images and generated patterns, localization, preflight, brand kits, custom outputs, and release updates.",
   "license": "AGPL-3.0-only",
   "type": "module",
   "bin": {
