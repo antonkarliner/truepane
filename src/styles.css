@@ -1626,6 +1626,19 @@ body[data-route="guide"] > .site-footer { display: none; }
 .guide-article thead th { background: rgba(26,22,18,0.05); }
 .guide-article tbody tr:last-child > * { border-bottom: 0; }
 .guide-article tbody th { width: 24%; }
+.guide-related {
+  margin-top: 56px;
+  padding-top: 2px;
+}
+.guide-related ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.guide-related li { font-size: 14px; }
 .guide-article :not(pre) > code {
   padding: 2px 5px;
   border-radius: 4px;

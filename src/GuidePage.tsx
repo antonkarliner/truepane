@@ -89,6 +89,30 @@ function ComparisonTable({
   );
 }
 
+const comparisonGuides = [
+  ["truepane-vs-applaunchpad", "AppLaunchpad"],
+  ["truepane-vs-previewed", "Previewed"],
+  ["truepane-vs-appscreens", "AppScreens"],
+  ["truepane-vs-screenshots-pro", "Screenshots.pro"],
+  ["truepane-vs-appmockup", "AppMockUp"],
+] as const;
+
+function RelatedComparisons({ current }: { current: typeof comparisonGuides[number][0] }) {
+  return (
+    <section className="guide-related" aria-labelledby="related-comparisons-title">
+      <h2 id="related-comparisons-title">Related comparisons</h2>
+      <ul>
+        <li><a href="/guides/best-app-store-screenshot-generators">All screenshot generators compared</a></li>
+        {comparisonGuides
+          .filter(([slug]) => slug !== current)
+          .map(([slug, name]) => (
+            <li key={slug}><a href={`/guides/${slug}`}>Truepane vs {name}</a></li>
+          ))}
+      </ul>
+    </section>
+  );
+}
+
 function CreateWithAgentsGuide() {
   return (
     <>
@@ -436,6 +460,8 @@ function AppLaunchpadComparisonGuide() {
         actual export path before committing: templates, licensing, and paid-plan limits can change.
       </p>
 
+      <RelatedComparisons current="truepane-vs-applaunchpad" />
+
       <aside>
         <strong>Sources checked:</strong> the <a href="https://theapplaunchpad.com/">AppLaunchpad product page</a> and
         <a href="https://theapplaunchpad.com/pricing"> pricing page</a> on 5 August 2026.
@@ -502,6 +528,8 @@ function PreviewedComparisonGuide() {
         exports and uses the AGPL-3.0 license for its source code. These are different kinds of
         licenses, so review the current terms for your intended commercial use.
       </p>
+
+      <RelatedComparisons current="truepane-vs-previewed" />
 
       <aside>
         <strong>Sources checked:</strong> the <a href="https://previewed.app/">Previewed product page</a> and
@@ -570,6 +598,8 @@ function AppScreensComparisonGuide() {
         direct publishing, so compare the repeated work rather than the subscription alone.
       </p>
 
+      <RelatedComparisons current="truepane-vs-appscreens" />
+
       <aside>
         <strong>Sources checked:</strong> the <a href="https://appscreens.com/">AppScreens product page</a> and
         <a href="https://appscreens.com/pricing"> pricing page</a> on 5 August 2026.
@@ -630,6 +660,8 @@ function ScreenshotsProComparisonGuide() {
         PNG exports, but it does matter if you modify and provide the software as a network service.
       </p>
 
+      <RelatedComparisons current="truepane-vs-screenshots-pro" />
+
       <aside>
         <strong>Sources checked:</strong> the <a href="https://screenshots.pro/">Screenshots.pro product and pricing page</a> and
         <a href="https://screenshots.pro/license"> license page</a> on 5 August 2026.
@@ -687,6 +719,8 @@ function AppMockUpComparisonGuide() {
         or changed-only release output matters. Because both can be tried without an account,
         the best test is to build and revise the same two-slide set in each.
       </p>
+
+      <RelatedComparisons current="truepane-vs-appmockup" />
 
       <aside>
         <strong>Sources checked:</strong> the <a href="https://app-mockup.com/">AppMockUp product page</a>,
