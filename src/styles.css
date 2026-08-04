@@ -798,6 +798,8 @@ button { cursor: pointer; font: inherit; }
 }
 #root:has(> .welcome) + .seo-content { border-top: 0; }
 .welcome__header {
+  width: min(1320px, 100%);
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -825,8 +827,8 @@ button { cursor: pointer; font: inherit; }
 }
 .welcome__skip span { color: #1a1612; text-decoration: underline; text-underline-offset: 3px; }
 .welcome__intro {
-  width: min(840px, 100%);
-  margin-top: clamp(32px, 5vh, 52px);
+  width: min(1320px, 100%);
+  margin: clamp(32px, 5vh, 52px) auto 0;
 }
 .welcome__eyebrow,
 .welcome-path__label {
@@ -839,6 +841,7 @@ button { cursor: pointer; font: inherit; }
   text-transform: uppercase;
 }
 .welcome__intro h1 {
+  max-width: 840px;
   margin: 12px 0 0;
   font-size: clamp(38px, 3.6vw, 50px);
   line-height: 1.06;
@@ -877,7 +880,7 @@ button { cursor: pointer; font: inherit; }
 .welcome__table {
   width: 100%;
   max-width: 1320px;
-  margin-top: 34px;
+  margin: 34px auto 0;
   flex: 1;
   position: relative;
   display: grid;
@@ -900,7 +903,6 @@ button { cursor: pointer; font: inherit; }
 .welcome-path--mcp {
   padding-left: 48px;
 }
-.welcome-path--editor { padding-right: 0; }
 .welcome-path h2 {
   margin: 10px 0 0;
   font-size: clamp(25px, 2.4vw, 36px);
