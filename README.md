@@ -1,8 +1,9 @@
 # Truepane
 
-**Truepane** is a small, fast, browser-based app screenshot generator for the App Store
-and Google Play — title + subhead text, a device frame, your screenshot, and a generated
-background, exported as individual PNGs, a horizontal strip, or a ZIP.
+**Truepane** is a free, open-source screenshot-set builder for the App Store and Google
+Play. Compose and localize a complete release visually in the browser, or hand the same
+project to an AI agent through the bundled MCP server. Try it at
+[truepane.dev](https://truepane.dev).
 
 Everything renders to `<canvas>` in the browser. Screenshots stay on your machine.
 Optional AI helpers send only the text you ask them to process (and, when supplied,
@@ -31,6 +32,9 @@ tool small, sharp, and cheap to run.
   optional shape overlay (rings, blobs, waves, dots, mesh, arcs, triangles, grid, zigzag,
   bubbles), each with independent colors. Shapes flow continuously across the strip and
   reproduce exactly from a stored seed.
+- **Custom background images**: upload a backdrop or derive a blurred one from each app
+  capture, then control fit, opacity, scrim, and whether an uploaded image spans one slide
+  or the full strip. Imported images are resized locally to a practical render budget.
 - **One composable shape family.** Alongside the ten fixed looks, `Custom…` is a parameter
   surface rather than a preset: pick a primitive (ring, disc, arc, triangle, bar, blob) and
   an arrangement (scatter, grid, row, radial, wave), then tune count, size, spacing,
@@ -52,10 +56,16 @@ tool small, sharp, and cheap to run.
 - **Cross-slide devices**: span one synchronized device across two adjacent slides.
   Both clipped halves share their screenshot, position, scale, and rotation.
 - **Export**: per-slide PNG, one horizontal strip PNG, or a ZIP of everything. Plus JSON
-  project import/export. State auto-saves to `localStorage`.
+  project import/export. The editor auto-saves documents and content-addressed binary
+  assets to IndexedDB, with a localStorage fallback where IndexedDB is unavailable.
+- **Responsive editor with history**: purpose-built desktop and mobile layouts, light and
+  dark themes, and a 100-step undo/redo history with standard keyboard shortcuts.
 - **Multi-platform projects**: keep separate iPhone, iPad, Android phone, and Android
   tablet captures on the same ordered slides. Locale screenshots fall back only to
   their own target's source capture; they never borrow another platform's image.
+- **Localization**: store translated copy, locale-specific captures, and per-language
+  fonts in one project. Translation can be entered manually, generated through the
+  optional AI helper, or produced by an MCP-connected agent.
 - **Preview-first bulk import**: choose a folder or ZIP, review deterministic
   target/locale/slide mappings, correct rows, then apply once. Explicit
   `target/locale/NN-name.png` paths take priority; conflicts never overwrite silently.
@@ -93,8 +103,10 @@ Each of these was a deliberate fork, chosen for a reason:
 
 ## Architecture
 
-- **`src/render.ts`** — the rendering engine. Pure canvas drawing, no React. Defines the
-  device frames and paints every pixel.
+- **`src/core/`** — platform-neutral project logic shared by the browser and MCP server:
+  canvas rendering, normalization, composition, output validation, preflight, bulk
+  import, brand kits, release comparison, and background-image preparation.
+  **`src/core/render.ts`** defines the device frames and paints every pixel.
   - **Concentric-corner invariant:** the BODY / BEZEL / SCREEN rounded rects share a
     center of curvature (`x + r` equal across all three; same for `y + r`). Breaking it
     produces "laddery" corner kinks. New frames go through `defineFrame()`, which throws
@@ -105,13 +117,21 @@ Each of these was a deliberate fork, chosen for a reason:
     so it flows across slides; a seeded `mulberry32` PRNG keeps a strip reproducible.
   - Masking uses offscreen canvases with `destination-in` / `destination-out` (rather
     than `ctx.clip()`) to get antialiased edges.
-- **`src/App.tsx`** — single source of truth for `{ slides, settings }`, persistence
-  (`localStorage`), font loading, and all export paths.
-- **`src/Sidebar.tsx`** — the control panel. **`src/components.tsx`** — reusable controls
-  and the slide preview. **`src/palette.ts`** — screenshot palette extraction.
-  **`src/ai.ts`** — client for the AI endpoint.
+- **`src/App.tsx`** — editor state, history, hydration, persistence coordination, and web
+  export paths. **`src/Sidebar.tsx`** and **`src/MobileLayout.tsx`** provide the desktop
+  and mobile control surfaces; **`src/components.tsx`** contains shared controls and the
+  canvas preview.
+- **`src/storage/`** — IndexedDB document and content-addressed asset storage, including
+  migration from the original localStorage format and cleanup of unreferenced binaries.
+- **`src/Welcome.tsx`** and **`src/GuidePage.tsx`** — the public landing page and
+  prerendered guide/comparison routes. **`src/ai.ts`** is the browser client for the
+  optional AI style and translation endpoints.
+- **`server/mcp/`** — the Node MCP server and native-canvas adapter. The publishable npm
+  package metadata lives in **`packages/truepane-mcp/`**.
 - **`supabase/functions/generator-bg-prompt/`** — the Edge Function that turns a prompt
   into validated, clamped style params (raw model output never reaches the renderer).
+- **`supabase/functions/generator-translate/`** — the optional title/subhead translation
+  endpoint.
 
 ## Running locally
 
@@ -131,15 +151,20 @@ AI controls are hidden. To enable them, copy `.env.example` to `.env` and opt in
 
 ```
 VITE_ENABLE_AI=true
+VITE_PUBLIC_SITE_URL=https://truepane.dev
 VITE_BG_PROMPT_URL=https://YOUR-PROJECT.supabase.co/functions/v1/generator-bg-prompt
 VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_TRANSLATE_URL=https://YOUR-PROJECT.supabase.co/functions/v1/generator-translate
 ```
 
-The Edge Function reads `GROQ_API_KEY` from its Supabase secrets (and an optional
-`BG_PROMPT_MODEL`, default `llama-3.3-70b-versatile`). Deploy it with:
+`VITE_ENABLE_AI` gates both helpers. Configure either endpoint independently; an
+unconfigured helper stays hidden. The Edge Functions read `GROQ_API_KEY` from Supabase
+secrets. The background helper also accepts an optional `BG_PROMPT_MODEL` (default
+`llama-3.3-70b-versatile`). Deploy them with:
 
 ```sh
 supabase functions deploy generator-bg-prompt --project-ref YOUR-REF --no-verify-jwt
+supabase functions deploy generator-translate --project-ref YOUR-REF --no-verify-jwt
 ```
 
 Server-side rate limiting is currently best-effort (in-memory, per isolate). Add a
@@ -273,9 +298,16 @@ fallback, so glyphs a font lacks come out as boxes.
 
 ## Deployment
 
-Builds to a static site in `dist/` — deploy anywhere. **Cloudflare Pages** is recommended
-(unlimited bandwidth on the free tier, so egress stays $0): build command `npm run build`,
-output directory `dist`. Set the two `VITE_*` variables in the Pages project to enable AI.
+The site builds to `dist/` and can be hosted as a static SPA anywhere. This repository is
+configured for Cloudflare Workers static assets through `wrangler.jsonc`; deploy it with:
+
+```sh
+npm run deploy
+```
+
+Set `VITE_PUBLIC_SITE_URL` at build time for canonical URLs, `robots.txt`, the sitemap,
+and prerendered guide metadata. Set the optional AI variables above only when those
+helpers should be exposed.
 
 ## License
 
