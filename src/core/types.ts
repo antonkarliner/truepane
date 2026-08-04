@@ -107,6 +107,27 @@ export type ShapeKind =
   | "zigzag"
   | "bubbles";
 
+// Where a background image's pixels come from. "upload" carries its own bytes;
+// "screenshot" derives from the slide's own screenshot at paint time and so
+// costs no storage at all.
+export type BackgroundImageSource =
+  | { kind: "upload"; id: string; dataUrl: string; width: number; height: number }
+  | { kind: "screenshot"; blur: number };
+
+export interface BackgroundImage {
+  source: BackgroundImageSource;
+  /** "slide" fits one slide; "strip" fits W*N and is sliced by slideIndex. */
+  span: "slide" | "strip";
+  fit: "cover" | "contain";
+  opacity: number;
+  /** User-controlled wash between image and text — the legibility control. */
+  scrim: number;
+  scrimColor: string;
+  /** Mean relative luminance (0..1), measured once at import so preflight can
+   * estimate text contrast without a canvas. */
+  meanLuminance: number;
+}
+
 export interface Background {
   fill: BackgroundFill;
   shape: ShapeKind;
@@ -120,6 +141,8 @@ export interface Background {
   density: number;
   dotsAligned: boolean;
   gradientAngle: number;
+  /** Optional image layer, painted between the fill and the shape overlay. */
+  image?: BackgroundImage | null;
 }
 
 export interface FillOption {

@@ -944,21 +944,119 @@ export const SHAPE_FAMILIES: ShapeFamily[] = [
   { id: "bubbles", name: "Bubbles", seeded: true },
 ];
 
+/**
+ * Where a background image lands, in slide-local canvas px.
+ *
+ * `span: "strip"` fits the image across the whole strip (W*N) and then shifts
+ * by one slide width per slide, which is what makes a long backdrop flow
+ * continuously instead of repeating. Pure and canvas-free so the continuity
+ * invariant can be tested directly.
+ */
+export function backgroundImageRect(
+  iw: number,
+  ih: number,
+  F: Frame,
+  totalSlides: number,
+  slideIndex: number,
+  span: "slide" | "strip",
+  fit: "cover" | "contain",
+): { dx: number; dy: number; dw: number; dh: number } {
+  const boxW = span === "strip" ? F.W * Math.max(1, totalSlides) : F.W;
+  const boxH = F.H;
+  if (iw <= 0 || ih <= 0) return { dx: 0, dy: 0, dw: boxW, dh: boxH };
+  const scaleX = boxW / iw;
+  const scaleY = boxH / ih;
+  const scale = fit === "cover" ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY);
+  const dw = iw * scale;
+  const dh = ih * scale;
+  const offset = span === "strip" ? slideIndex * F.W : 0;
+  return { dx: (boxW - dw) / 2 - offset, dy: (boxH - dh) / 2, dw, dh };
+}
+
+function paintBackgroundImage(
+  ctx: CanvasRenderingContext2D,
+  bg: Background,
+  screenshot: ImageSourceLike | null,
+  slideIndex: number,
+  totalSlides: number,
+  F: Frame,
+): void {
+  const image = bg.image;
+  if (!image) return;
+
+  let drawable: ImageSourceLike | null = null;
+  if (image.source.kind === "upload") {
+    drawable = uploadedImages.get(image.source.id) ?? null;
+  } else if (screenshot) {
+    drawable = screenshot;
+  }
+  if (!drawable) return;
+
+  const iw = drawable.naturalWidth || drawable.width;
+  const ih = drawable.naturalHeight || drawable.height;
+  const { dx, dy, dw, dh } = backgroundImageRect(
+    iw,
+    ih,
+    F,
+    totalSlides,
+    slideIndex,
+    image.span,
+    image.fit,
+  );
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, image.opacity));
+  if (image.source.kind === "screenshot" && image.source.blur > 0) {
+    // Blur radius scales with the frame so it looks identical at any render
+    // scale or output size.
+    ctx.filter = `blur(${(image.source.blur / 100) * F.W * 0.08}px)`;
+  }
+  ctx.drawImage(toDrawable(drawable), dx, dy, dw, dh);
+  ctx.filter = "none";
+  ctx.globalAlpha = 1;
+
+  const scrim = Math.max(0, Math.min(1, image.scrim));
+  if (scrim > 0) {
+    ctx.globalAlpha = scrim;
+    ctx.fillStyle = image.scrimColor || "#000000";
+    ctx.fillRect(0, 0, F.W, F.H);
+  }
+  ctx.restore();
+}
+
 function paintBackground(
   ctx: CanvasRenderingContext2D,
   bg: Background,
   slideIndex: number,
   totalSlides: number,
   F: Frame,
+  screenshot: ImageSourceLike | null = null,
 ): void {
   // 1) Fill layer.
   if (bg.fill === "linear") paintLinearGradient(ctx, bg, slideIndex, totalSlides, F);
   else if (bg.fill === "radial") paintRadialGradient(ctx, bg, slideIndex, totalSlides, F);
   else paintSolid(ctx, bg, F);
 
-  // 2) Optional shape overlay on top of the fill.
+  // 2) Optional image layer between the fill and the shapes, so shape overlays
+  //    stay usable on top of a photo and a sub-1.0 opacity blends into the fill.
+  paintBackgroundImage(ctx, bg, screenshot, slideIndex, totalSlides, F);
+
+  // 3) Optional shape overlay on top.
   const gen = bg.shape && bg.shape !== "none" ? SHAPE_GENERATORS[bg.shape] : undefined;
   if (gen) gen(ctx, bg, slideIndex, totalSlides, F);
+}
+
+// Decoded uploads, keyed by content id. The renderer is sync and runtime-
+// agnostic, so callers register decoded images here rather than the painter
+// awaiting a decode mid-draw. Browser and MCP server both populate it.
+const uploadedImages = new Map<string, ImageSourceLike>();
+
+export function registerBackgroundImage(id: string, image: ImageSourceLike): void {
+  uploadedImages.set(id, image);
+}
+
+export function hasBackgroundImage(id: string): boolean {
+  return uploadedImages.has(id);
 }
 
 // ---------------------------------------------------------------------
@@ -1391,7 +1489,14 @@ export async function paintSlide(
   const ctx = get2d(canvas);
   ctx.clearRect(0, 0, F.W, F.H);
 
-  paintBackground(ctx, slide.background ?? settings.background, slideIndex, totalSlides, F);
+  paintBackground(
+    ctx,
+    slide.background ?? settings.background,
+    slideIndex,
+    totalSlides,
+    F,
+    slide.image ?? null, // source for a screenshot-derived background
+  );
   paintText(ctx, slide, settings, F);
   paintDevice(ctx, slide, settings, F);
 }
