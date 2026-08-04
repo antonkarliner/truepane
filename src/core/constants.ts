@@ -1,4 +1,4 @@
-import type { AppState, FontOption, LanguageTarget } from "./types";
+import type { AppState, CustomShapeSpec, FontOption, LanguageTarget } from "./types";
 
 export const STORAGE_KEY = "appstore-generator-v1";
 
@@ -79,6 +79,25 @@ export const BG_PRESETS: { name: string; color: string; accent: string }[] = [
   { name: "Slate", color: "#eef0f2", accent: "#46505c" }, // minimal grayscale mono
   { name: "Plum", color: "#f4ecde", accent: "#7a3b6a" }, // warm bg + cool complementary pop
 ];
+
+// Starting point for the "custom" shape family: a loose scatter of stroked
+// rings, close enough to a familiar look that the first render is not a
+// surprise, and every field sits mid-range so each slider reads in both
+// directions. NOT part of defaultState() — see Background.customShape.
+export const DEFAULT_CUSTOM_SHAPE: CustomShapeSpec = {
+  primitive: "ring",
+  layout: "scatter",
+  count: 18,
+  size: 0.22,
+  sizeJitter: 0.4,
+  rotation: 0,
+  rotationJitter: 180,
+  spacingX: 0.5,
+  spacingY: 0.25,
+  phase: 0,
+  strokeWidth: 4,
+  opacityRamp: 0,
+};
 
 export function defaultState(): AppState {
   return {

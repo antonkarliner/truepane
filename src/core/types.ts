@@ -109,7 +109,39 @@ export type ShapeKind =
   | "triangles"
   | "grid"
   | "zigzag"
-  | "bubbles";
+  | "bubbles"
+  | "custom";
+
+// The one parameterized family. Everything here is DATA — never code — so a
+// shared .truepane file stays inert, the renderer stays fixed for release
+// baselines, and an agent can compose a look by filling in numbers.
+export type CustomShapePrimitive = "ring" | "disc" | "arc" | "triangle" | "bar" | "blob";
+export type CustomShapeLayout = "scatter" | "grid" | "row" | "radial" | "wave";
+
+export interface CustomShapeSpec {
+  primitive: CustomShapePrimitive;
+  layout: CustomShapeLayout;
+  /** Instances across the WHOLE strip (1..200). Also the allocation bound. */
+  count: number;
+  /** Instance radius in slide-width units, 0..1. */
+  size: number;
+  /** Random size variation, 0..1. */
+  sizeJitter: number;
+  /** Base rotation in degrees, -180..180. */
+  rotation: number;
+  /** Random rotation spread in degrees, 0..360. */
+  rotationJitter: number;
+  /** Lattice step along the strip in slide-width units, 0.02..2. */
+  spacingX: number;
+  /** Lattice step / wave amplitude in slide-height units, 0.02..2. */
+  spacingY: number;
+  /** Shifts the lattice along the strip, 0..1. */
+  phase: number;
+  /** Outline width in px at native scale; 0 = filled. 0..40. */
+  strokeWidth: number;
+  /** Alpha ramp across the strip, -1..1. 0 = flat, >0 fades in, <0 fades out. */
+  opacityRamp: number;
+}
 
 // Where a background image's pixels come from. "upload" carries its own bytes;
 // "screenshot" derives from the slide's own screenshot at paint time and so
@@ -147,6 +179,9 @@ export interface Background {
   gradientAngle: number;
   /** Optional image layer, painted between the fill and the shape overlay. */
   image?: BackgroundImage | null;
+  /** Parameters for shape "custom". Absent until the family is used, so a
+   * project that never selects it serializes exactly as it did before. */
+  customShape?: CustomShapeSpec;
 }
 
 export interface FillOption {

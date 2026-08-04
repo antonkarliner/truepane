@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getImageAsset } from "./media";
 import { normalizeAppState, normalizeBackground } from "./normalize";
+import { DEFAULT_CUSTOM_SHAPE } from "./constants";
 
 describe("project v2 media normalization", () => {
   it("migrates v1 source and locale screenshots into the active target", () => {
@@ -91,5 +92,72 @@ describe("normalizeBackground image layer", () => {
     expect(img.source).toEqual({ kind: "screenshot", blur: 0.7 });
     expect(img.span).toBe("slide");
     expect(img.fit).toBe("cover");
+  });
+});
+
+// The custom shape family is the surface an agent drives directly, so every
+// field is a hostile-input boundary. Clamping rather than rejecting matters
+// because a sloppy call should still render something instead of failing the
+// whole style patch and stalling the agent.
+describe("custom shape normalization", () => {
+  it("leaves customShape absent when a project never used the family", () => {
+    // Absent stays absent: a project that predates the family must serialize
+    // exactly as before, or every stored release baseline is invalidated.
+    expect(normalizeBackground({ shape: "rings" }).customShape).toBeUndefined();
+    expect(normalizeBackground({ customShape: "nonsense" }).customShape).toBeUndefined();
+  });
+
+  it("clamps out-of-range numbers into their documented range", () => {
+    const c = normalizeBackground({
+      customShape: {
+        count: 1e9,
+        size: 40,
+        sizeJitter: -3,
+        rotation: 10000,
+        rotationJitter: -5,
+        spacingX: 0,
+        spacingY: 900,
+        phase: 7,
+        strokeWidth: -12,
+        opacityRamp: 50,
+      },
+    }).customShape!;
+    // count is the allocation bound — it must be clamped before anything reads it.
+    expect(c.count).toBe(200);
+    expect(c.size).toBe(1);
+    expect(c.sizeJitter).toBe(0);
+    expect(c.rotation).toBe(180);
+    expect(c.rotationJitter).toBe(0);
+    // A zero lattice step is degenerate, so spacing has a hard non-zero floor.
+    expect(c.spacingX).toBe(0.02);
+    expect(c.spacingY).toBe(2);
+    expect(c.phase).toBe(1);
+    expect(c.strokeWidth).toBe(0);
+    expect(c.opacityRamp).toBe(1);
+  });
+
+  it("falls back to defaults for NaN, non-numbers and unknown enum values", () => {
+    const c = normalizeBackground({
+      customShape: {
+        primitive: "hexagon",
+        layout: "spiral",
+        count: NaN,
+        size: "big",
+        spacingX: Infinity,
+      },
+    }).customShape!;
+    expect(c.primitive).toBe(DEFAULT_CUSTOM_SHAPE.primitive);
+    expect(c.layout).toBe(DEFAULT_CUSTOM_SHAPE.layout);
+    expect(c.count).toBe(DEFAULT_CUSTOM_SHAPE.count);
+    expect(c.size).toBe(DEFAULT_CUSTOM_SHAPE.size);
+    expect(c.spacingX).toBe(DEFAULT_CUSTOM_SHAPE.spacingX);
+  });
+
+  it("keeps a partial spec's valid fields and fills the rest from defaults", () => {
+    // An agent patching one knob must not have the other eleven wiped.
+    const c = normalizeBackground({ customShape: { primitive: "triangle", count: 42 } }).customShape!;
+    expect(c.primitive).toBe("triangle");
+    expect(c.count).toBe(42);
+    expect(c.spacingX).toBe(DEFAULT_CUSTOM_SHAPE.spacingX);
   });
 });

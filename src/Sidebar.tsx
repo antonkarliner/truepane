@@ -1,6 +1,6 @@
 // Sidebar component — all controls for Truepane.
 import { useRef, useState } from "react";
-import { ColorRow, CompositionControls, Field, ImageDrop, LayoutSlider, Segmented, TextInput } from "./components";
+import { ColorRow, CompositionControls, CustomShapeControls, Field, ImageDrop, LayoutSlider, Segmented, TextInput } from "./components";
 import { BrandKitControls } from "./BrandKitControls";
 import { OutputFormatControl } from "./OutputFormatControl";
 import { ReleaseUpdateControls } from "./ReleaseUpdateControls";
@@ -11,7 +11,7 @@ import { getImageAsset, setImageAsset } from "./core/media";
 
 const DEFAULT_SHAPE_PRESETS = ["#c47c3b", "#1a1612", "#5b6647", "#c4523b", "#5b6cff", "#8a6f4f"];
 import { aiConfigured, generateBackground, translateConfigured, translateSlides, type AiProvider } from "./ai";
-import { FONT_OPTIONS, TRANSLATE_LANGUAGES } from "./core/constants";
+import { DEFAULT_CUSTOM_SHAPE, FONT_OPTIONS, TRANSLATE_LANGUAGES } from "./core/constants";
 import type {
   AppState,
   Background,
@@ -329,6 +329,12 @@ export function Sidebar(props: SidebarProps) {
   const isGradient = bg.fill !== "solid";
   const hasShape = bg.shape !== "none";
   const accentLabel = bg.shape === "rings" ? "Ring color" : "Shape color";
+  // The custom family is driven by its own spec, not by the shared `density`
+  // slider. It stays `seeded` so Randomize still reshuffles its jitter.
+  const isCustomShape = bg.shape === "custom";
+  const customSpec = bg.customShape ?? DEFAULT_CUSTOM_SHAPE;
+  const updateCustomShape = (patch: Partial<typeof customSpec>) =>
+    handleBgUpdate({ customShape: { ...customSpec, ...patch } });
 
   // --- Background image ------------------------------------------------
   // The three scopes are one field, not three: an image on settings.background
@@ -1057,7 +1063,13 @@ export function Sidebar(props: SidebarProps) {
           </>
         )}
 
-        {shapeMeta?.seeded && (
+        {isCustomShape && (
+          <div className="field__hint">
+            Open <strong>Advanced</strong> below to set the primitive, arrangement and spacing.
+          </div>
+        )}
+
+        {shapeMeta?.seeded && !isCustomShape && (
           <Field label={`Density · ${bg.density ?? 3}`}>
             <input
               className="slider"
@@ -1130,6 +1142,9 @@ export function Sidebar(props: SidebarProps) {
         </button>
         {showBackgroundOptions && (
           <div className="optional-controls">
+            {isCustomShape && (
+              <CustomShapeControls spec={customSpec} onChange={updateCustomShape} />
+            )}
             {bgImage && !isDerivedBackdrop && (
               <>
                 <Field label="Image fit">

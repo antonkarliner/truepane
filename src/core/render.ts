@@ -20,6 +20,7 @@
 import type {
   Background,
   CanvasLike,
+  CustomShapeSpec,
   FillOption,
   Frame,
   ImageSourceLike,
@@ -34,6 +35,7 @@ import type {
 import type { OutputSpec } from "./types";
 import { outputForSettings } from "./output";
 import { resolveComposition } from "./composition";
+import { clampCustomShape } from "./normalize";
 
 // ---------------------------------------------------------------------
 // Canvas factory — where every canvas this module draws on comes from.
@@ -850,6 +852,195 @@ function paintTriangles(
   ctx.restore();
 }
 
+/** One placed instance of the custom family, in strip-space. */
+export interface CustomShapePlacement {
+  /** Center along the strip, in slide-width units across 0..totalSlides. */
+  cx: number;
+  /** Center down the slide, 0..1 of slide height. */
+  cy: number;
+  /** Radius in slide-width units. */
+  r: number;
+  /** Rotation in radians. */
+  rot: number;
+  /** Per-instance alpha multiplier from the opacity ramp, 0..1. */
+  alpha: number;
+}
+
+/**
+ * Lay the custom family out across the whole strip.
+ *
+ * Pure and canvas-free: it takes no slide index and returns strip-space
+ * coordinates, so every slide of a strip paints from the SAME list and simply
+ * culls what falls outside it. That is the property that makes a multi-slide
+ * strip read as one composition — reseeding per slide would put a visible seam
+ * at every slide boundary, which is exactly why the ten hand-tuned generators
+ * are written this way too (see `mulberry32` above).
+ *
+ * `count` is the number of instances across the whole strip, not per slide, and
+ * it is clamped here as well as in `normalizeBackground` so that a spec which
+ * reaches the renderer without going through project normalization still cannot
+ * ask for an unbounded allocation.
+ */
+export function customShapePositions(
+  spec: CustomShapeSpec,
+  seed: number,
+  totalSlides: number,
+): CustomShapePlacement[] {
+  const s = clampCustomShape(spec);
+  const N = Number.isFinite(totalSlides) ? Math.max(1, Math.min(64, Math.floor(totalSlides))) : 1;
+  const rng = mulberry32(Number.isFinite(seed) ? seed : 0);
+  const out: CustomShapePlacement[] = [];
+
+  // The lattice layouts derive their extent from spacing; `count` caps how much
+  // of it gets filled, so it stays the single allocation bound for every layout.
+  const cols = Math.max(1, Math.ceil(N / s.spacingX));
+  const rows = Math.max(1, Math.round(1 / s.spacingY));
+  const total =
+    s.layout === "grid" ? Math.min(s.count, cols * rows) : s.count;
+
+  for (let i = 0; i < total; i++) {
+    // Draw the same number of samples per instance in the same order for every
+    // layout, so `seed` means the same thing as the layout is switched.
+    const a = rng();
+    const b = rng();
+    const jitterSize = rng();
+    const jitterRot = rng();
+
+    let cx: number;
+    let cy: number;
+    if (s.layout === "scatter") {
+      cx = a * N;
+      cy = b;
+    } else if (s.layout === "grid") {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      cx = (col + 0.5 + s.phase) * s.spacingX;
+      cy = (row + 0.5) * s.spacingY;
+    } else if (s.layout === "row") {
+      cx = (i + 0.5 + s.phase) * s.spacingX;
+      cy = 0.5;
+    } else if (s.layout === "radial") {
+      // Concentric elliptical rings around the strip center. Elliptical rather
+      // than circular because this function knows nothing about pixel
+      // dimensions; spacingX/spacingY are the horizontal/vertical ring steps.
+      let ring = 0;
+      let placed = 0;
+      let perRing = 1;
+      while (placed + perRing <= i) {
+        placed += perRing;
+        ring += 1;
+        perRing = ring * 6;
+      }
+      const k = i - placed;
+      const angle = (k / perRing) * Math.PI * 2 + s.phase * Math.PI * 2;
+      cx = N / 2 + Math.cos(angle) * ring * s.spacingX;
+      cy = 0.5 + Math.sin(angle) * ring * s.spacingY;
+    } else {
+      // wave — a row whose band is modulated sinusoidally by its own position
+      // along the strip, so the curve continues unbroken across slide edges.
+      cx = (i + 0.5 + s.phase) * s.spacingX;
+      cy = 0.5 + Math.sin(cx * Math.PI + s.phase * Math.PI * 2) * s.spacingY;
+    }
+
+    // Lattice layouts get their jitter from the spacing they sit on; scatter is
+    // already random, so only its size/rotation vary.
+    if (s.layout === "grid" || s.layout === "row" || s.layout === "wave") {
+      cx += (a - 0.5) * s.spacingX * s.sizeJitter;
+      cy += (b - 0.5) * s.spacingY * s.sizeJitter;
+    }
+
+    const r = Math.max(0, s.size * (1 + (jitterSize - 0.5) * 2 * s.sizeJitter));
+    const rot = ((s.rotation + (jitterRot - 0.5) * s.rotationJitter) * Math.PI) / 180;
+    // Ramp along the strip: positive fades in from the left, negative fades out
+    // toward the right, 0 is flat.
+    const t = Math.min(1, Math.max(0, cx / N));
+    const alpha = 1 - Math.abs(s.opacityRamp) * (s.opacityRamp > 0 ? 1 - t : t);
+
+    out.push({ cx, cy, r, rot, alpha });
+  }
+  return out;
+}
+
+/** Build the path for one custom primitive, centered at the origin. */
+function customShapePath(ctx: CanvasRenderingContext2D, primitive: string, r: number): void {
+  ctx.beginPath();
+  if (primitive === "disc") {
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+  } else if (primitive === "ring") {
+    // Annulus: outer circle one way, inner the other, so a filled ring is still
+    // a ring and a stroked one is two concentric circles.
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.arc(0, 0, r * 0.62, Math.PI * 2, 0, true);
+  } else if (primitive === "arc") {
+    ctx.arc(0, 0, r, Math.PI, Math.PI * 2);
+  } else if (primitive === "triangle") {
+    for (let k = 0; k < 3; k++) {
+      const t = (k / 3) * Math.PI * 2 - Math.PI / 2;
+      const px = Math.cos(t) * r;
+      const py = Math.sin(t) * r;
+      if (k === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  } else if (primitive === "bar") {
+    const h = Math.max(1, r * 0.34);
+    ctx.moveTo(-r + h, -h);
+    ctx.lineTo(r - h, -h);
+    ctx.arc(r - h, 0, h, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(-r + h, h);
+    ctx.arc(-r + h, 0, h, Math.PI / 2, -Math.PI / 2);
+    ctx.closePath();
+  } else {
+    // blob — a three-lobed wobble whose phase comes from the instance rotation,
+    // so it varies per instance without consuming extra PRNG draws.
+    const steps = 48;
+    for (let k = 0; k <= steps; k++) {
+      const t = (k / steps) * Math.PI * 2;
+      const rr = r * (1 + 0.18 * Math.sin(3 * t));
+      const px = Math.cos(t) * rr;
+      const py = Math.sin(t) * rr;
+      if (k === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  }
+}
+
+// The one parameterized family: a primitive, a layout rule and seeded jitter,
+// all supplied as data. Everything it can draw is reachable from a serializable
+// spec, so a project file stays inert and the renderer stays fixed.
+function paintCustom(
+  ctx: CanvasRenderingContext2D,
+  bg: Background,
+  slideIndex: number,
+  totalSlides: number,
+  F: Frame,
+): void {
+  const spec = clampCustomShape(bg.customShape);
+  const placements = customShapePositions(spec, bg.seed, totalSlides);
+  const filled = spec.strokeWidth === 0;
+
+  ctx.save();
+  ctx.fillStyle = bg.accent;
+  ctx.strokeStyle = bg.accent;
+  ctx.lineWidth = spec.strokeWidth;
+  for (const p of placements) {
+    const x = (p.cx - slideIndex) * F.W;
+    const y = p.cy * F.H;
+    const r = p.r * F.W;
+    if (x + r < -200 || x - r > F.W + 200) continue;
+    ctx.globalAlpha = (bg.accentOpacity ?? 0.55) * p.alpha;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(p.rot);
+    customShapePath(ctx, spec.primitive, r);
+    if (filled) ctx.fill();
+    else ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 // Linear gradient (background → accent) at bg.gradientAngle, spanning the whole
 // strip so it flows continuously across slides.
 function paintLinearGradient(
@@ -927,6 +1118,7 @@ const SHAPE_GENERATORS: Record<string, ShapePainter> = {
   grid: paintGrid,
   zigzag: paintZigzag,
   bubbles: paintBubbles,
+  custom: paintCustom,
 };
 
 // Fill layer options (solid + gradients).
@@ -949,6 +1141,9 @@ export const SHAPE_FAMILIES: ShapeFamily[] = [
   { id: "grid", name: "Grid", seeded: true },
   { id: "zigzag", name: "Zigzag", seeded: true },
   { id: "bubbles", name: "Bubbles", seeded: true },
+  // Last on purpose: the ten above are hand-tuned looks you pick, this one is a
+  // parameter surface you compose. Its controls live behind "Advanced".
+  { id: "custom", name: "Custom…", seeded: true },
 ];
 
 /**

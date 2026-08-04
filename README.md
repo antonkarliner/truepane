@@ -31,6 +31,15 @@ tool small, sharp, and cheap to run.
   optional shape overlay (rings, blobs, waves, dots, mesh, arcs, triangles, grid, zigzag,
   bubbles), each with independent colors. Shapes flow continuously across the strip and
   reproduce exactly from a stored seed.
+- **One composable shape family.** Alongside the ten fixed looks, `Custom…` is a parameter
+  surface rather than a preset: pick a primitive (ring, disc, arc, triangle, bar, blob) and
+  an arrangement (scatter, grid, row, radial, wave), then tune count, size, spacing,
+  rotation, stroke weight, and a fade along the strip. It is **data, not code** — twelve
+  bounded numbers and two closed enums — so a shared project file stays inert, renders
+  identically forever, and can be diffed. That makes it the intended surface for
+  agent-driven variation over MCP: an agent composes a background by filling in numbers
+  instead of shipping drawing code. Its controls live behind **Advanced** in the background
+  panel so the picker stays uncluttered.
 - **Color tools**: content-based palette extraction from your screenshot, harmonized shape
   suggestions, an eyedropper (native EyeDropper API + a click-a-slide fallback for
   Safari/Firefox), and curated color-science presets.

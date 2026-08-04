@@ -89,6 +89,90 @@ const backgroundImageSchema = z
   })
   .partial();
 
+// The one parameterized shape family. Every knob is a bounded number or a
+// closed enum, so a style patch stays pure data: nothing here can describe
+// drawing code, which is what keeps a shared .truepane file inert and the
+// renderer fixed enough for release baselines to mean anything.
+//
+// Ranges live in the schema so a bad call fails at the boundary with a message
+// naming the field, instead of being silently clamped inside the renderer.
+const customShapeSchema = z
+  .object({
+    primitive: z
+      .enum(["ring", "disc", "arc", "triangle", "bar", "blob"])
+      .describe(
+        "What each instance is. ring = annulus, disc = solid circle, arc = half-circle sweep, " +
+          "triangle = equilateral, bar = rounded capsule, blob = soft three-lobed shape.",
+      ),
+    layout: z
+      .enum(["scatter", "grid", "row", "radial", "wave"])
+      .describe(
+        "How instances are arranged across the strip. scatter = seeded random fill, " +
+          "grid = lattice on spacingX/spacingY, row = single band across the middle, " +
+          "radial = concentric rings around the strip center, wave = a row on a sine curve.",
+      ),
+    count: z
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .describe(
+        "Instances across the WHOLE strip, not per slide, so it means the same thing whatever " +
+          "the slide count. For grid it is a cap on the lattice. 1..200.",
+      ),
+    size: z
+      .number()
+      .min(0)
+      .max(1)
+      .describe("Instance radius in slide-width units. 0.05 is a speck, 0.5 is half a slide wide. 0..1."),
+    sizeJitter: z
+      .number()
+      .min(0)
+      .max(1)
+      .describe("Random variation in size, and position wobble for the lattice layouts. 0 = uniform. 0..1."),
+    rotation: z.number().min(-180).max(180).describe("Base rotation of every instance, in degrees. -180..180."),
+    rotationJitter: z
+      .number()
+      .min(0)
+      .max(360)
+      .describe("Random rotation spread around `rotation`, in degrees. 360 = fully random. 0..360."),
+    spacingX: z
+      .number()
+      .min(0.02)
+      .max(2)
+      .describe(
+        "Step along the strip in slide-width units (grid, row, wave) or horizontal ring step (radial). " +
+          "0.5 puts two instances per slide width. 0.02..2.",
+      ),
+    spacingY: z
+      .number()
+      .min(0.02)
+      .max(2)
+      .describe(
+        "Step down the slide in slide-height units (grid), wave amplitude (wave), or vertical ring " +
+          "step (radial). 0.02..2.",
+      ),
+    phase: z
+      .number()
+      .min(0)
+      .max(1)
+      .describe("Shifts the lattice along the strip by a fraction of one step — use it to nudge instances off the text. 0..1."),
+    strokeWidth: z
+      .number()
+      .min(0)
+      .max(40)
+      .describe("Outline width in export pixels. 0 fills the primitive instead of stroking it. 0..40."),
+    opacityRamp: z
+      .number()
+      .min(-1)
+      .max(1)
+      .describe(
+        "Alpha ramp along the strip. 0 = flat, +1 fades in from a transparent first slide, " +
+          "-1 fades out toward a transparent last slide. -1..1.",
+      ),
+  })
+  .partial();
+
 const backgroundSchema = z
   .object({
     fill: z.enum(FILL_IDS as [string, ...string[]]).describe("Fill layer: solid | linear | radial"),
@@ -109,6 +193,10 @@ const backgroundSchema = z
     gradientAngle: z.number().describe("Linear gradient angle in degrees (default 135)"),
     image: backgroundImageSchema.describe(
       "Placement of the background image layer. Set the image itself with set_background_image.",
+    ),
+    customShape: customShapeSchema.describe(
+      'Parameters for shape "custom" — the one composable family. Ignored unless shape is "custom". ' +
+        "Partial: fields you omit keep their current value. See list_options for a worked example.",
     ),
   })
   .partial();
@@ -133,8 +221,13 @@ const compositionSchema = z.object({
 }).partial();
 
 function patchBackground(base: Background, patch: BackgroundPatch): Background {
-  const { image, ...rest } = patch;
+  const { image, customShape, ...rest } = patch;
   const merged = { ...base, ...rest } as Background;
+  // Same partial-patch rule as the image layer: tuning one knob must not wipe
+  // the other eleven. normalizeBackground fills any field still missing.
+  if (customShape) {
+    merged.customShape = { ...(base.customShape ?? {}), ...customShape } as Background["customShape"];
+  }
   if (!image) return normalizeBackground(merged);
 
   // A patch tunes the existing layer rather than replacing it — spreading the
@@ -374,6 +467,31 @@ export function registerTools(server: McpServer): void {
           "",
           'Ring layouts (background.ringLayout, only for shape "rings"):',
           ...rings,
+          "",
+          'The composable family (background.shape "custom", parameters in background.customShape):',
+          "- The ten families above are fixed looks you pick. \"custom\" is a parameter surface you compose,",
+          "  and it is the intended place to invent a background instead of settling for the nearest preset.",
+          "- It is data, never code: twelve bounded numbers and two closed enums. A project using it stays a",
+          "  plain JSON file, renders identically forever, and is safe to share.",
+          "- primitive: ring | disc | arc | triangle | bar | blob — what each instance is.",
+          "- layout: scatter | grid | row | radial | wave — how instances are arranged.",
+          "- count (1..200): instances across the WHOLE strip, not per slide, so density means the same",
+          "  thing on a 3-slide and a 6-slide project. For layout \"grid\" it caps the lattice.",
+          "- size (0..1): radius in slide-width units. sizeJitter (0..1) varies it (and wobbles the lattice).",
+          "- rotation (-180..180) and rotationJitter (0..360), in degrees.",
+          "- spacingX / spacingY (0.02..2): lattice step in slide-width / slide-height units. For \"wave\",",
+          "  spacingY is the amplitude; for \"radial\" the two are the horizontal and vertical ring steps.",
+          "- phase (0..1): shifts the lattice along the strip — the knob to nudge shapes off the titles.",
+          "- strokeWidth (0..40): outline width in export px; 0 fills instead of stroking.",
+          "- opacityRamp (-1..1): 0 flat, +1 fades in from the first slide, -1 fades out toward the last.",
+          "- Instances are laid out across the whole strip and culled per slide, so a multi-slide strip is",
+          "  one continuous composition with no seam at slide boundaries. `seed` reshuffles the jitter.",
+          "- Worked example — sparse outlined rings drifting up the strip and fading in:",
+          '    set_style { background: { shape: "custom", accent: "#c47c3b", accentOpacity: 0.5, seed: 12,',
+          '      customShape: { primitive: "ring", layout: "wave", count: 22, size: 0.16, sizeJitter: 0.5,',
+          '        spacingX: 0.42, spacingY: 0.18, phase: 0.25, strokeWidth: 6, opacityRamp: 0.6 } } }',
+          "  Then iterate one field at a time: raise count for density, raise strokeWidth for weight, set",
+          '  strokeWidth 0 for solid shapes, change primitive to "blob" for a softer read.',
           "",
           "Background image (an optional layer painted between the fill and the shapes):",
           "- Set the bytes with set_background_image (absolute path; downscaled and re-encoded server-side).",
@@ -811,6 +929,8 @@ export function registerTools(server: McpServer): void {
         `(${PLATFORM_IDS.join(" | ")}), and background — a partial patch merged onto the current background. ` +
         "Background fields: fill (solid|linear|radial), shape (see list_options), color, gradientColor, accent, " +
         "accentOpacity (0..1), ringLayout, ringCount (1..8), seed, density (1..8), dotsAligned, gradientAngle. " +
+        'With shape "custom", background.customShape carries the composable parameters (primitive, layout, count, ' +
+        "size, spacing, rotation, strokeWidth, opacityRamp) — see list_options for the ranges and a worked example. " +
         "Composition supports a preset plus normalized text/device placement, scale, and flat rotation (-20..20). " +
         "With slide_index (0-based), background/titleColor/subheadColor/composition apply as per-slide overrides instead " +
         "(other fields are global-only and rejected). With language (a locale code, e.g. \"ar\"), fontFamily " +

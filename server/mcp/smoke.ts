@@ -703,6 +703,112 @@ async function main(): Promise<void> {
       "cleared background image should be absent, not null",
     );
 
+    // 13) the composable "custom" shape family, the agent-facing surface for
+    // background variation. Reuses the 4-slide bg-smoke project.
+    const customStyled = firstText(await client.callTool({
+      name: "set_style",
+      arguments: {
+        project_id: "bg-smoke",
+        background: {
+          fill: "solid",
+          color: "#f2eee6",
+          shape: "custom",
+          accent: "#c47c3b",
+          accentOpacity: 0.6,
+          seed: 12,
+          customShape: {
+            primitive: "disc",
+            layout: "row",
+            count: 12,
+            size: 0.3,
+            sizeJitter: 0,
+            spacingX: 1,
+            spacingY: 0.2,
+            phase: 0.5,
+            strokeWidth: 0,
+          },
+        },
+      },
+    }));
+    assert.match(customStyled, /"shape":"custom"/);
+    assert.match(customStyled, /"primitive":"disc"/);
+
+    // A partial patch tunes one knob without wiping the other eleven — the same
+    // rule the image layer follows.
+    const customPatched = firstText(await client.callTool({
+      name: "set_style",
+      arguments: { project_id: "bg-smoke", background: { customShape: { count: 14 } } },
+    }));
+    assert.match(customPatched, /"count":14/);
+    assert.match(customPatched, /"layout":"row"/, "a partial customShape patch must not reset the layout");
+
+    // Out-of-range values are rejected at the schema boundary with a message
+    // naming the field, rather than being silently swallowed.
+    const outOfRange = (await client.callTool({
+      name: "set_style",
+      arguments: { project_id: "bg-smoke", background: { customShape: { count: 1e9 } } },
+    })) as { isError?: boolean; content: { type: string; text?: string }[] };
+    assert.equal(outOfRange.isError, true, "an out-of-range count should fail at the schema boundary");
+    assert.match(firstText(outOfRange), /count/i, "the rejection should name the offending field");
+
+    const customShapeDir = path.join(outDir, "custom-shape");
+    await client.callTool({
+      name: "render",
+      arguments: { project_id: "bg-smoke", output_dir: customShapeDir, what: "slides", scale: 0.5 },
+    });
+    // phase 0.5 with spacingX 1 centers a disc exactly on each slide boundary,
+    // so the two sides of every seam must be the same color: the family lays out
+    // in strip-space and is culled per slide, never re-laid-out per slide.
+    const customWidth = pngSize(path.join(customShapeDir, "slide-01.png")).w;
+    const discY = Math.round(pngSize(path.join(customShapeDir, "slide-01.png")).h * 0.5);
+    for (let slide = 1; slide < 4; slide++) {
+      const left = await pixelAt(path.join(customShapeDir, `slide-0${slide}.png`), customWidth - 1, discY);
+      const right = await pixelAt(path.join(customShapeDir, `slide-0${slide + 1}.png`), 0, discY);
+      assert.ok(
+        channelDistance(left, right) <= 12,
+        `custom shape seam between slide ${slide} and ${slide + 1}: ${left} vs ${right}`,
+      );
+    }
+    console.error("custom shape strip continuity: OK");
+
+    // A hand-edited project file is the path Zod does not guard, so junk there
+    // must clamp and still render rather than throw or hang.
+    const hostilePath = path.join(tmp, "custom-hostile.json");
+    const hostileProject = JSON.parse(fs.readFileSync(bgClearedPath, "utf8"));
+    hostileProject.settings.background.shape = "custom";
+    hostileProject.settings.background.customShape = {
+      primitive: "hexagon",
+      layout: "spiral",
+      count: 1e9,
+      size: 99,
+      spacingX: 0,
+      spacingY: null,
+      strokeWidth: -4,
+      opacityRamp: "lots",
+    };
+    fs.writeFileSync(hostilePath, JSON.stringify(hostileProject));
+    await client.callTool({ name: "load_project", arguments: { path: hostilePath, id: "custom-hostile" } });
+    const hostileExport = path.join(tmp, "custom-hostile-out.json");
+    await client.callTool({
+      name: "export_project",
+      arguments: { project_id: "custom-hostile", path: hostileExport },
+    });
+    const healed = JSON.parse(fs.readFileSync(hostileExport, "utf8")).settings.background.customShape;
+    assert.equal(healed.count, 200, "count must clamp to its allocation bound");
+    assert.equal(healed.primitive, "ring", "an unknown primitive must fall back, not persist");
+    assert.equal(healed.layout, "scatter", "an unknown layout must fall back, not persist");
+    assert.ok(healed.spacingX >= 0.02, "a zero lattice step must clamp to a non-zero floor");
+    await client.callTool({
+      name: "render",
+      arguments: {
+        project_id: "custom-hostile",
+        output_dir: path.join(outDir, "custom-hostile"),
+        what: "slides",
+        scale: 0.25,
+      },
+    });
+    console.error("custom shape hostile-input clamping: OK");
+
     console.error(`\nSMOKE OK — inspect renders in ${outDir}`);
     console.log(outDir); // machine-readable: the only stdout line
   } finally {

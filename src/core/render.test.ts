@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   RING_LAYOUTS,
   backgroundImageRect,
+  customShapePositions,
   defineFrame,
   getFrame,
   getLayout,
@@ -9,8 +10,8 @@ import {
   mulberry32,
   wrapText,
 } from "./render";
-import { defaultState } from "./constants";
-import type { Composition, Frame, Slide } from "./types";
+import { DEFAULT_CUSTOM_SHAPE, defaultState } from "./constants";
+import type { Composition, CustomShapeSpec, Frame, Slide } from "./types";
 
 // A fake 2D context whose text width is proportional to string length, so the
 // wrapping logic is deterministic without a real canvas.
@@ -203,5 +204,105 @@ describe("backgroundImageRect", () => {
   it("degrades to the box for a zero-sized image instead of dividing by zero", () => {
     const r = backgroundImageRect(0, 0, F, 2, 0, "strip", "cover");
     expect(Number.isFinite(r.dw) && Number.isFinite(r.dh)).toBe(true);
+  });
+});
+
+describe("customShapePositions", () => {
+  const spec = (over: Partial<CustomShapeSpec> = {}): CustomShapeSpec => ({
+    ...DEFAULT_CUSTOM_SHAPE,
+    ...over,
+  });
+  const LAYOUTS: CustomShapeSpec["layout"][] = ["scatter", "grid", "row", "radial", "wave"];
+
+  // A saved project must repaint identically forever: release baselines and the
+  // changed-only export both assume the same spec + seed yields the same pixels.
+  it("is deterministic for the same spec and seed", () => {
+    for (const layout of LAYOUTS) {
+      const a = customShapePositions(spec({ layout, count: 60 }), 7, 4);
+      const b = customShapePositions(spec({ layout, count: 60 }), 7, 4);
+      expect(b).toEqual(a);
+    }
+  });
+
+  it("reshuffles when the seed changes", () => {
+    const a = customShapePositions(spec({ count: 40 }), 1, 3);
+    const b = customShapePositions(spec({ count: 40 }), 2, 3);
+    expect(b).not.toEqual(a);
+  });
+
+  // Slide-independence is the whole reason these generators lay out in
+  // strip-space: every slide of a strip paints from ONE list and culls what
+  // falls outside it. If positions were derived per slide the composition would
+  // restart at each boundary and the strip would show a seam.
+  it("lays out one composition across the strip, not one per slide", () => {
+    const s = spec({ layout: "scatter", count: 200 });
+    const positions = customShapePositions(s, 5, 4);
+    // Instances land across the full 0..N strip range, not inside slide 0.
+    const owners = new Set(positions.map((p) => Math.floor(p.cx)));
+    expect([...owners].sort()).toEqual([0, 1, 2, 3]);
+    // Every instance belongs to exactly one slide, so culling per slide
+    // reassembles the list with no duplicates and no gaps.
+    const perSlide = [0, 1, 2, 3].map(
+      (i) => positions.filter((p) => p.cx >= i && p.cx < i + 1).length,
+    );
+    expect(perSlide.reduce((a, b) => a + b, 0)).toBe(positions.length);
+  });
+
+  // `count` is a strip total, not a per-slide amount. Adding slides must not
+  // multiply the instance count — that is what keeps the allocation bound at
+  // 200 no matter how long the strip gets, and what makes `count` mean the same
+  // thing to an agent regardless of project size.
+  it("treats count as a strip total, so it does not drift with slide count", () => {
+    for (const layout of LAYOUTS) {
+      const s = spec({ layout, count: 12 });
+      expect(customShapePositions(s, 7, 6).length).toBe(customShapePositions(s, 7, 3).length);
+    }
+  });
+
+  // A longer strip must extend a lattice rather than restart it: the instances
+  // a 3-slide project renders have to stay put when slides are added, or every
+  // existing slide's pixels shift when the project grows.
+  it("extends a lattice along the strip instead of re-laying it out", () => {
+    const s = spec({ layout: "row", count: 12 });
+    expect(customShapePositions(s, 7, 6).map((p) => p.cx)).toEqual(
+      customShapePositions(s, 7, 3).map((p) => p.cx),
+    );
+  });
+
+  // Agents send junk. Hostile input must clamp and render — never hang on an
+  // unbounded loop and never throw.
+  it("bounds its output for hostile input", () => {
+    const hostile: unknown[] = [
+      { ...DEFAULT_CUSTOM_SHAPE, count: 1e9 },
+      { ...DEFAULT_CUSTOM_SHAPE, count: NaN },
+      { ...DEFAULT_CUSTOM_SHAPE, count: -5 },
+      { ...DEFAULT_CUSTOM_SHAPE, count: 1e9, spacingX: 0, spacingY: 0, layout: "grid" },
+      { ...DEFAULT_CUSTOM_SHAPE, count: 1e9, layout: "radial" },
+      { primitive: "hexagon", layout: "spiral", count: "lots" },
+      undefined,
+    ];
+    for (const raw of hostile) {
+      const positions = customShapePositions(raw as CustomShapeSpec, 1, 6);
+      expect(positions.length).toBeGreaterThan(0);
+      expect(positions.length).toBeLessThanOrEqual(200);
+      for (const p of positions) {
+        expect(Number.isFinite(p.cx) && Number.isFinite(p.cy)).toBe(true);
+        expect(Number.isFinite(p.r) && Number.isFinite(p.rot)).toBe(true);
+        expect(p.alpha).toBeGreaterThanOrEqual(0);
+        expect(p.alpha).toBeLessThanOrEqual(1);
+      }
+    }
+    // A hostile totalSlides must not become the allocation bound either.
+    expect(customShapePositions(DEFAULT_CUSTOM_SHAPE, 1, 1e9).length).toBeLessThanOrEqual(200);
+    expect(customShapePositions(DEFAULT_CUSTOM_SHAPE, 1, NaN).length).toBeGreaterThan(0);
+  });
+
+  it("ramps alpha along the strip in the direction the sign asks for", () => {
+    const flat = customShapePositions(spec({ layout: "row", count: 8, opacityRamp: 0 }), 1, 4);
+    expect(flat.every((p) => p.alpha === 1)).toBe(true);
+    const inward = customShapePositions(spec({ layout: "row", count: 8, opacityRamp: 1 }), 1, 4);
+    expect(inward[0].alpha).toBeLessThan(inward[inward.length - 1].alpha);
+    const outward = customShapePositions(spec({ layout: "row", count: 8, opacityRamp: -1 }), 1, 4);
+    expect(outward[0].alpha).toBeGreaterThan(outward[outward.length - 1].alpha);
   });
 });

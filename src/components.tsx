@@ -24,7 +24,15 @@ import {
   type Point,
   type TextBounds,
 } from "./core/composition";
-import type { Composition, OutputSpec, RingLayout, Settings, Slide, TextAlign } from "./core/types";
+import type {
+  Composition,
+  CustomShapeSpec,
+  OutputSpec,
+  RingLayout,
+  Settings,
+  Slide,
+  TextAlign,
+} from "./core/types";
 
 declare global {
   interface Window {
@@ -755,6 +763,93 @@ export function LayoutSlider({
             <span />
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// Parameter surface for the "custom" shape family. Shared by the desktop
+// sidebar and the mobile drawer so the twelve knobs are described once; both
+// render it inside their advanced/disclosure area, since this is the one family
+// you compose rather than pick.
+export function CustomShapeControls({
+  spec,
+  onChange,
+}: {
+  spec: CustomShapeSpec;
+  onChange: (patch: Partial<CustomShapeSpec>) => void;
+}) {
+  const num = (
+    label: string,
+    key: keyof CustomShapeSpec,
+    min: number,
+    max: number,
+    step: number,
+  ) => (
+    <Field label={label}>
+      <input
+        className="slider"
+        type="range"
+        aria-label={label.split(" ·")[0]}
+        min={min}
+        max={max}
+        step={step}
+        value={spec[key] as number}
+        onChange={(e) => onChange({ [key]: parseFloat(e.target.value) } as Partial<CustomShapeSpec>)}
+      />
+    </Field>
+  );
+
+  const lattice = spec.layout !== "scatter";
+
+  return (
+    <div className="custom-shape">
+      <Field label="Primitive">
+        <Segmented
+          value={spec.primitive}
+          onChange={(v) => onChange({ primitive: v as CustomShapeSpec["primitive"] })}
+          options={[
+            { value: "ring", label: "Ring" },
+            { value: "disc", label: "Disc" },
+            { value: "arc", label: "Arc" },
+            { value: "triangle", label: "Triangle" },
+            { value: "bar", label: "Bar" },
+            { value: "blob", label: "Blob" },
+          ]}
+        />
+      </Field>
+      <Field label="Arrangement">
+        <Segmented
+          value={spec.layout}
+          onChange={(v) => onChange({ layout: v as CustomShapeSpec["layout"] })}
+          options={[
+            { value: "scatter", label: "Scatter" },
+            { value: "grid", label: "Grid" },
+            { value: "row", label: "Row" },
+            { value: "radial", label: "Radial" },
+            { value: "wave", label: "Wave" },
+          ]}
+        />
+      </Field>
+      {num(`Count · ${spec.count}`, "count", 1, 200, 1)}
+      {num(`Size · ${Math.round(spec.size * 100)}%`, "size", 0, 1, 0.01)}
+      {num(`Size jitter · ${Math.round(spec.sizeJitter * 100)}%`, "sizeJitter", 0, 1, 0.05)}
+      {num(`Rotation · ${Math.round(spec.rotation)}°`, "rotation", -180, 180, 1)}
+      {num(`Rotation jitter · ${Math.round(spec.rotationJitter)}°`, "rotationJitter", 0, 360, 5)}
+      {lattice && num(`Spacing across · ${spec.spacingX.toFixed(2)}`, "spacingX", 0.02, 2, 0.01)}
+      {lattice && num(`Spacing down · ${spec.spacingY.toFixed(2)}`, "spacingY", 0.02, 2, 0.01)}
+      {lattice && num(`Phase · ${Math.round(spec.phase * 100)}%`, "phase", 0, 1, 0.01)}
+      {num(
+        `Stroke · ${spec.strokeWidth === 0 ? "filled" : `${Math.round(spec.strokeWidth)}px`}`,
+        "strokeWidth",
+        0,
+        40,
+        1,
+      )}
+      {num(`Fade across strip · ${Math.round(spec.opacityRamp * 100)}%`, "opacityRamp", -1, 1, 0.05)}
+      <div className="field__hint">
+        Instances are placed across the whole strip, so the pattern flows through every slide
+        instead of restarting at each one. Count is the strip total.
       </div>
     </div>
   );
