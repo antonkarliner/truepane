@@ -144,6 +144,7 @@ describe("background images", () => {
     source: { kind: "upload", id: "ignored", dataUrl: source.dataUrl, width: 3960, height: 2868 },
     span: "strip",
     fit: "cover",
+    blur: 0.35,
     opacity: 0.9,
     scrim: 0.25,
     scrimColor: "#101010",

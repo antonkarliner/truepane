@@ -381,23 +381,6 @@ export function Sidebar(props: SidebarProps) {
     }
   };
 
-  const toggleDerivedBackdrop = (on: boolean) => {
-    handleBgUpdate({
-      image: on
-        ? {
-            source: { kind: "screenshot", blur: 0.5 },
-            span: "slide",
-            fit: "cover",
-            opacity: 1,
-            scrim: 0,
-            scrimColor: "#000000",
-            meanLuminance: 0.5,
-          }
-        : null,
-    });
-    setBgImageNote(null);
-  };
-
   const outputDim = dimForSettings(state.settings);
   const slideSizeHint = `${outputDim.W} × ${outputDim.H}`;
   const stripSizeHint = `${outputDim.W * Math.max(1, slidesCount)} × ${outputDim.H}`;
@@ -940,26 +923,21 @@ export function Sidebar(props: SidebarProps) {
             One slide needs {slideSizeHint}px; one image across the whole strip needs {stripSizeHint}px.
             Any size works — it is scaled and cropped to fit.
           </div>
-          {!isDerivedBackdrop && (
-            <ImageDrop
-              image={bgImage?.source.kind === "upload" ? { dataUrl: bgImage.source.dataUrl } : null}
-              onImage={(img) => void applyBackgroundImage(img)}
-              onClear={() => {
-                handleBgUpdate({ image: null });
-                setBgImageNote(null);
-              }}
-            />
+          {isDerivedBackdrop && (
+            <div className="field__hint bg-image-note">
+              This older project uses its app screenshot as the backdrop. Upload an image to replace it.
+            </div>
           )}
+          <ImageDrop
+            image={bgImage?.source.kind === "upload" ? { dataUrl: bgImage.source.dataUrl } : null}
+            onImage={(img) => void applyBackgroundImage(img)}
+            onClear={() => {
+              handleBgUpdate({ image: null });
+              setBgImageNote(null);
+            }}
+          />
           {bgImageBusy && <div className="field__hint">Preparing image…</div>}
           {bgImageNote && <div className="field__hint bg-image-note">{bgImageNote}</div>}
-          <label className="ai-lock">
-            <input
-              type="checkbox"
-              checked={isDerivedBackdrop}
-              onChange={(e) => toggleDerivedBackdrop(e.target.checked)}
-            />
-            Use blurred screenshot
-          </label>
         </div>
 
         {bgImage && (
@@ -977,22 +955,18 @@ export function Sidebar(props: SidebarProps) {
                 />
               </Field>
             )}
-            {isDerivedBackdrop && bgImage.source.kind === "screenshot" && (
-              <Field label={`Blur · ${Math.round(bgImage.source.blur * 100)}%`}>
-                <input
-                  className="slider"
-                  type="range"
-                  aria-label="Screenshot blur"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={bgImage.source.blur}
-                  onChange={(e) =>
-                    patchImage({ source: { kind: "screenshot", blur: parseFloat(e.target.value) } })
-                  }
-                />
-              </Field>
-            )}
+            <Field label={`Blur · ${Math.round((bgImage.blur ?? 0) * 100)}%`}>
+              <input
+                className="slider"
+                type="range"
+                aria-label="Background image blur"
+                min="0"
+                max="1"
+                step="0.05"
+                value={bgImage.blur ?? 0}
+                onChange={(e) => patchImage({ blur: parseFloat(e.target.value) })}
+              />
+            </Field>
             <Field label={`Image opacity · ${Math.round(bgImage.opacity * 100)}%`}>
               <input
                 className="slider"

@@ -54,7 +54,7 @@ describe("project v2 media normalization", () => {
 describe("normalizeBackground image layer", () => {
   const upload = {
     source: { kind: "upload", id: "abc", dataUrl: "data:image/jpeg;base64,x", width: 100, height: 50 },
-    span: "strip", fit: "contain", opacity: 0.8, scrim: 0.4, scrimColor: "#ffffff", meanLuminance: 0.3,
+    span: "strip", fit: "contain", blur: 0.25, opacity: 0.8, scrim: 0.4, scrimColor: "#ffffff", meanLuminance: 0.3,
   };
 
   // A project saved before this feature must serialize byte-identically to
@@ -83,15 +83,21 @@ describe("normalizeBackground image layer", () => {
     expect(normalizeBackground({ image: "nonsense" }).image).toBeUndefined();
   });
 
-  // A screenshot-derived background is the slide's own screenshot. Slicing it
-  // across the strip would be meaningless, so span/fit are forced.
-  it("forces a screenshot-derived layer to slide span and cover", () => {
+  // Screenshot-derived backgrounds predate the shared blur field. Migrating
+  // their value preserves their pixels while new uploads use the same control.
+  it("migrates legacy screenshot blur while forcing slide span and cover", () => {
     const img = normalizeBackground({
       image: { source: { kind: "screenshot", blur: 0.7 }, span: "strip", fit: "contain" },
     }).image!;
     expect(img.source).toEqual({ kind: "screenshot", blur: 0.7 });
+    expect(img.blur).toBe(0.7);
     expect(img.span).toBe("slide");
     expect(img.fit).toBe("cover");
+  });
+
+  it("defaults uploaded background blur to zero and clamps explicit values", () => {
+    expect(normalizeBackground({ image: { ...upload, blur: undefined } }).image?.blur).toBe(0);
+    expect(normalizeBackground({ image: { ...upload, blur: 4 } }).image?.blur).toBe(1);
   });
 });
 

@@ -154,6 +154,7 @@ export function backgroundImageFromUpload(
     source: prepared.source,
     span,
     fit: "cover",
+    blur: 0,
     opacity: 1,
     scrim: 0,
     scrimColor: "#000000",

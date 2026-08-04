@@ -143,9 +143,8 @@ export interface CustomShapeSpec {
   opacityRamp: number;
 }
 
-// Where a background image's pixels come from. "upload" carries its own bytes;
-// "screenshot" derives from the slide's own screenshot at paint time and so
-// costs no storage at all.
+// Where a background image's pixels come from. "screenshot" is retained only
+// so projects saved before uploaded-backdrop blur was introduced still paint.
 export type BackgroundImageSource =
   | { kind: "upload"; id: string; dataUrl: string; width: number; height: number }
   | { kind: "screenshot"; blur: number };
@@ -155,6 +154,8 @@ export interface BackgroundImage {
   /** "slide" fits one slide; "strip" fits W*N and is sliced by slideIndex. */
   span: "slide" | "strip";
   fit: "cover" | "contain";
+  /** Backdrop blur, 0..1. Optional only for projects saved before this field. */
+  blur?: number;
   opacity: number;
   /** User-controlled wash between image and text — the legibility control. */
   scrim: number;

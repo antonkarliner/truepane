@@ -103,6 +103,9 @@ function normalizeBackgroundImage(raw: unknown): BackgroundImage | undefined {
     source,
     span: !derived && src.span === "strip" ? "strip" : "slide",
     fit: !derived && src.fit === "contain" ? "contain" : "cover",
+    // Screenshot-derived projects stored blur on the source. Migrate that
+    // value to the image layer so the same control now works for uploads too.
+    blur: clamp01(src.blur, source.kind === "screenshot" ? source.blur : 0),
     opacity: clamp01(src.opacity, 1),
     scrim: clamp01(src.scrim, 0),
     scrimColor: typeof src.scrimColor === "string" ? src.scrimColor : "#000000",

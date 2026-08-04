@@ -32,9 +32,9 @@ tool small, sharp, and cheap to run.
   optional shape overlay (rings, blobs, waves, dots, mesh, arcs, triangles, grid, zigzag,
   bubbles), each with independent colors. Shapes flow continuously across the strip and
   reproduce exactly from a stored seed.
-- **Custom background images**: upload a backdrop or derive a blurred one from each app
-  capture, then control fit, opacity, scrim, and whether an uploaded image spans one slide
-  or the full strip. Imported images are resized locally to a practical render budget.
+- **Custom background images**: upload a backdrop, then control blur, fit, opacity, scrim,
+  and whether it spans one slide or the full strip. Imported images are resized locally
+  to a practical render budget.
 - **One composable shape family.** Alongside the ten fixed looks, `Custom…` is a parameter
   surface rather than a preset: pick a primitive (ring, disc, arc, triangle, bar, blob) and
   an arrangement (scatter, grid, row, radial, wave), then tune count, size, spacing,

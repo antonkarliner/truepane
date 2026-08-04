@@ -1215,12 +1215,11 @@ function paintBackgroundImage(
   );
 
   // Blur radius scales with the frame so it looks identical at any render
-  // scale or output size. `blur` is 0..1 (normalizeBackground clamps it), so
-  // full blur is ~8% of the frame width — a backdrop, not a sharpen.
-  const blurPx =
-    image.source.kind === "screenshot" && image.source.blur > 0
-      ? image.source.blur * F.W * 0.08
-      : 0;
+  // scale or output size. Full blur is ~8% of the frame width: enough to turn
+  // an uploaded photo into a backdrop without changing its stored pixels.
+  // The source fallback preserves legacy screenshot-derived projects.
+  const blur = image.blur ?? (image.source.kind === "screenshot" ? image.source.blur : 0);
+  const blurPx = blur > 0 ? blur * F.W * 0.08 : 0;
 
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, image.opacity));
