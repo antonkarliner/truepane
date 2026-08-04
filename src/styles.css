@@ -1638,7 +1638,10 @@ body[data-route="guide"] > .site-footer { display: none; }
   padding: 0;
   list-style: none;
 }
-.guide-related li { font-size: 14px; }
+.guide-related li {
+  margin-top: 0;
+  font-size: 14px;
+}
 .guide-article :not(pre) > code {
   padding: 2px 5px;
   border-radius: 4px;
