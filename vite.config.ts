@@ -1,12 +1,18 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { cloudflare } from "@cloudflare/vite-plugin";
+import { GUIDE_REGISTRY, GuidePage, type GuideSlug } from "./src/GuidePage";
 
 const SEO_TITLE = "Truepane - App Store Screenshot Generator for Indie Apps";
 const SEO_DESCRIPTION =
-  "Create App Store and Google Play screenshots in your browser with device frames, styled backgrounds, local canvas rendering, and PNG, strip, or ZIP export.";
+  "Create App Store and Google Play screenshots in your browser with device frames, your own background images or generated ones, local canvas rendering, and PNG, strip, or ZIP export.";
 const DEFAULT_SITE_URL = "https://truepane.dev";
+const GUIDE_SLUGS = Object.keys(GUIDE_REGISTRY) as GuideSlug[];
 
 function normalizeSiteUrl(raw: string | undefined): string | null {
   const value = raw?.trim().replace(/\/+$/, "");
@@ -79,6 +85,38 @@ function jsonLd(siteUrl: string | null): string {
   ).replace(/</g, "\\u003c");
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function prerenderGuide(indexHtml: string, slug: GuideSlug, siteUrl: string): string {
+  const guide = GUIDE_REGISTRY[slug];
+  const route = `/guides/${slug}`;
+  const canonical = `${siteUrl}${route}`;
+  const article = renderToStaticMarkup(createElement(GuidePage, { slug }));
+
+  return indexHtml
+    .replace(/<title>.*?<\/title>/s, `<title>${escapeHtml(guide.title)}</title>`)
+    .replace(
+      /<meta name="description" content="[^"]*" \/>/,
+      `<meta name="description" content="${escapeHtml(guide.description)}" />`,
+    )
+    .replace(
+      /<link rel="canonical" href="[^"]*" \/>/,
+      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
+    )
+    .replace(
+      /<meta property="og:url" content="[^"]*" \/>/,
+      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
+    )
+    .replace("<body>", '<body data-route="guide">')
+    .replace('<div id="root"></div>', `<div id="root">${article}</div>`);
+}
+
 function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
   return {
     name: "truepane-seo",
@@ -118,8 +156,18 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${siteUrl}/</loc>\n  </url>\n  <url>\n    <loc>${siteUrl}/guides/create-app-store-screenshots-with-codex-or-claude-code</loc>\n  </url>\n  <url>\n    <loc>${siteUrl}/guides/update-localized-app-store-screenshots-without-uploading</loc>\n  </url>\n</urlset>\n`,
+        source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${siteUrl}/</loc>\n  </url>\n${GUIDE_SLUGS.map((slug) => `  <url>\n    <loc>${siteUrl}/guides/${slug}</loc>\n  </url>`).join("\n")}\n</urlset>\n`,
       });
+
+    },
+    async writeBundle(options) {
+      if (!siteUrl || !options.dir) return;
+      const indexHtml = await readFile(join(options.dir, "index.html"), "utf8");
+      const guidesDir = join(options.dir, "guides");
+      await mkdir(guidesDir, { recursive: true });
+      for (const slug of GUIDE_SLUGS) {
+        await writeFile(join(guidesDir, `${slug}.html`), prerenderGuide(indexHtml, slug, siteUrl));
+      }
     },
   };
 }

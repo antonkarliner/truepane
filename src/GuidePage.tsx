@@ -1,6 +1,10 @@
-export type GuideSlug =
-  | "create-app-store-screenshots-with-codex-or-claude-code"
-  | "update-localized-app-store-screenshots-without-uploading";
+import * as React from "react";
+
+type GuideEntry = {
+  title: string;
+  description: string;
+  component: () => React.JSX.Element;
+};
 
 const capturePrompt = `Read this repository's documented run and test workflow. Launch the app in an
 iPhone simulator and use existing demo or test data. Capture the Home, Recipe,
@@ -118,7 +122,8 @@ function CreateWithAgentsGuide() {
       <h2>Continue visually when needed</h2>
       <p>
         MCP and the browser editor use the same JSON project format. Import the project
-        into the <a href="/editor">Truepane editor</a> to drag a device, tune typography,
+        into the <a href="/editor">Truepane editor</a> to drag a device, place text, tune
+        typography, build <a href="/guides/build-one-continuous-background-across-app-store-screenshots">a continuous background</a>,
         or compare every slide by eye, then hand the edited project back to the agent.
       </p>
 
@@ -169,7 +174,8 @@ function LocalizedGuide() {
       <p>
         Each locale can have translated titles, its own screenshot, and its own font.
         Source-capture fallback can be useful, but preflight should make every fallback
-        visible. Choose fonts that cover the required script before server-side rendering.
+        visible. A backdrop can apply across the whole localized set. Choose fonts that
+        cover the required script before server-side rendering.
       </p>
 
       <h2>5. Run preflight across the complete matrix</h2>
@@ -195,17 +201,104 @@ function LocalizedGuide() {
   );
 }
 
+function ContinuousBackgroundGuide() {
+  return (
+    <>
+      <p className="guide-eyebrow">Guide · Continuous backgrounds</p>
+      <h1>Build one continuous background across App Store screenshots</h1>
+      <p className="guide-lead">
+        Turn separate store screenshots into one connected visual sequence. Truepane can
+        slice a single backdrop across the full strip, while every exported slide remains
+        the exact size your store listing expects.
+      </p>
+
+      <h2>1. Prepare the backdrop at strip dimensions</h2>
+      <p>
+        Start with the dimensions shown in the Background panel. One iPhone slide is
+        1320×2868, so a seven-slide backdrop is 9240×2868. Design the image at that full
+        width when exact placement matters, and keep important details away from slide
+        boundaries where titles and devices will overlap them.
+      </p>
+
+      <img
+        src="/welcome-strip-continuity.jpg"
+        alt="Seven Truepane screenshots connected by one continuous illustrated backdrop"
+        loading="lazy"
+      />
+
+      <h2>2. Choose how the image applies</h2>
+      <p>
+        Drop the image into the Background panel, then choose the scope that matches the
+        result you want:
+      </p>
+      <ul>
+        <li><strong>Across strip</strong> maps one wide image across the complete set, so adjacent exports meet at their edges.</li>
+        <li><strong>All slides</strong> uses the same image on every slide, fitting it separately inside each canvas.</li>
+        <li><strong>This slide</strong> applies an override only to the selected slide.</li>
+      </ul>
+      <p>
+        With an agent, call <code>set_background_image</code> with the local file first,
+        then use <code>set_style</code> with <code>background.image</code> to tune the
+        result. The image and rendered exports stay on your machine.
+      </p>
+
+      <h2>3. Keep every title readable</h2>
+      <p>
+        Place titles over the quietest parts of the composition. If the backdrop still
+        competes with the copy, lower Image opacity or add a Scrim in the title area. A
+        dark scrim helps light text; a light scrim helps dark text. Check every slide,
+        because contrast can change as the backdrop moves across the strip.
+      </p>
+
+      <h2>4. Build a continuous backdrop without an image</h2>
+      <p>
+        For a smaller, fully editable project, choose the <code>custom</code> shape family
+        instead. Its primitives are laid out in strip-space, so rings, discs, arcs,
+        triangles, bars, or blobs can flow continuously across multiple slides. The
+        arrangement is deterministic from its parameters and seed, which makes it easy
+        to reproduce in the editor or through MCP without storing a backdrop image.
+      </p>
+
+      <aside>
+        <strong>Export still happens slide by slide.</strong> Across strip changes how the
+        backdrop is sampled, not the output format. You can export individual PNGs, a
+        horizontal strip, or a ZIP from the same project.
+      </aside>
+    </>
+  );
+}
+
+export const GUIDE_REGISTRY = {
+  "create-app-store-screenshots-with-codex-or-claude-code": {
+    title: "Create App Store screenshots with Codex or Claude Code · Truepane",
+    description: "Launch the app, capture simulator states, compose with Truepane, and export native PNGs.",
+    component: CreateWithAgentsGuide,
+  },
+  "update-localized-app-store-screenshots-without-uploading": {
+    title: "Update localized App Store screenshots locally · Truepane",
+    description: "Repeat deterministic captures across locales and render only the assets that changed.",
+    component: LocalizedGuide,
+  },
+  "build-one-continuous-background-across-app-store-screenshots": {
+    title: "Build one continuous background across App Store screenshots · Truepane",
+    description: "Prepare one backdrop, flow it across a complete screenshot set, and keep every title readable.",
+    component: ContinuousBackgroundGuide,
+  },
+} satisfies Record<string, GuideEntry>;
+
+export type GuideSlug = keyof typeof GUIDE_REGISTRY;
+
 export function GuidePage({ slug }: { slug: GuideSlug }) {
+  const Guide = GUIDE_REGISTRY[slug].component;
+
   return (
     <div className="guide-page">
       <GuideHeader />
       <article className="guide-article">
-        {slug === "create-app-store-screenshots-with-codex-or-claude-code"
-          ? <CreateWithAgentsGuide />
-          : <LocalizedGuide />}
+        <Guide />
       </article>
       <footer className="guide-footer">
-        <a href="/#guides">Read the other guide</a>
+        <a href="/#guides">More guides</a>
         <a href="/editor">Open Truepane editor →</a>
       </footer>
     </div>

@@ -1591,6 +1591,15 @@ body[data-route="guide"] > .site-footer { display: none; }
 .guide-article p { margin: 0 0 18px; color: rgba(26,22,18,0.78); }
 .guide-article li + li { margin-top: 6px; }
 .guide-article a { color: inherit; text-underline-offset: 4px; }
+.guide-article img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 28px 0;
+  border: 1px solid rgba(26,22,18,0.14);
+  border-radius: 9px;
+}
 .guide-article :not(pre) > code {
   padding: 2px 5px;
   border-radius: 4px;
@@ -1618,6 +1627,21 @@ body[data-route="guide"] > .site-footer { display: none; }
   background: rgba(181,103,46,0.08);
   font-size: 15px;
   line-height: 1.65;
+}
+
+[data-theme="dark"] .guide-page {
+  background: #211e25;
+  color: #f0ece4;
+}
+[data-theme="dark"] .guide-header,
+[data-theme="dark"] .guide-article img,
+[data-theme="dark"] .guide-footer { border-color: rgba(255,255,255,0.13); }
+[data-theme="dark"] .guide-lead,
+[data-theme="dark"] .guide-article p { color: rgba(240,236,228,0.72) !important; }
+[data-theme="dark"] .guide-article :not(pre) > code { background: rgba(255,255,255,0.08); }
+[data-theme="dark"] .guide-article aside {
+  border-color: rgba(255,255,255,0.13);
+  background: rgba(255,255,255,0.04);
 }
 .guide-footer {
   padding: 28px 0 42px;

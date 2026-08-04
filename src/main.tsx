@@ -1,7 +1,8 @@
 import { StrictMode, useEffect, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./App";
-import { GuidePage, type GuideSlug } from "./GuidePage";
+import { GUIDE_REGISTRY, GuidePage, type GuideSlug } from "./GuidePage";
+import { initialTheme } from "./theme";
 import { Welcome } from "./Welcome";
 import "./styles.css";
 
@@ -9,10 +10,10 @@ type Route = "/" | "/editor" | `/guides/${GuideSlug}`;
 
 function currentRoute(): Route {
   if (window.location.pathname === "/editor") return "/editor";
-  if (
-    window.location.pathname === "/guides/create-app-store-screenshots-with-codex-or-claude-code"
-    || window.location.pathname === "/guides/update-localized-app-store-screenshots-without-uploading"
-  ) {
+  const guideSlug = window.location.pathname.startsWith("/guides/")
+    ? window.location.pathname.slice("/guides/".length)
+    : "";
+  if (Object.prototype.hasOwnProperty.call(GUIDE_REGISTRY, guideSlug)) {
     return window.location.pathname as Route;
   }
   return "/";
@@ -20,13 +21,38 @@ function currentRoute(): Route {
 
 function applyRouteToDocument(route: Route): void {
   document.body.dataset.route = route.startsWith("/guides/") ? "guide" : route === "/editor" ? "editor" : "home";
-  document.title = route === "/guides/create-app-store-screenshots-with-codex-or-claude-code"
-    ? "Create App Store screenshots with Codex or Claude Code · Truepane"
-    : route === "/guides/update-localized-app-store-screenshots-without-uploading"
-      ? "Update localized App Store screenshots locally · Truepane"
-      : "Truepane - App Store Screenshot Generator for Indie Apps";
+  const guide = route.startsWith("/guides/")
+    ? GUIDE_REGISTRY[route.slice("/guides/".length) as GuideSlug]
+    : null;
+  const metadata = guide ?? {
+    title: route === "/editor"
+      ? "Truepane editor · App Store screenshot generator"
+      : "Truepane - App Store Screenshot Generator for Indie Apps",
+    description: route === "/editor"
+      ? "Compose and export App Store and Google Play screenshot sets locally in the Truepane editor."
+      : "Create App Store and Google Play screenshots in your browser with device frames, your own background images or generated ones, local canvas rendering, and PNG, strip, or ZIP export.",
+  };
+
+  document.title = metadata.title;
+
+  let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  if (!canonical) {
+    canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    document.head.append(canonical);
+  }
+  canonical.href = new URL(route, window.location.origin).href;
+
+  let description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+  if (!description) {
+    description = document.createElement("meta");
+    description.name = "description";
+    document.head.append(description);
+  }
+  description.content = metadata.description;
 }
 
+initialTheme();
 const startingRoute = currentRoute();
 applyRouteToDocument(startingRoute);
 
@@ -63,8 +89,14 @@ function RootExperience() {
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("#root element not found");
 
-createRoot(rootEl).render(
+const experience = (
   <StrictMode>
     <RootExperience />
-  </StrictMode>,
+  </StrictMode>
 );
+
+if (rootEl.hasChildNodes()) {
+  hydrateRoot(rootEl, experience);
+} else {
+  createRoot(rootEl).render(experience);
+}
