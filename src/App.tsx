@@ -8,18 +8,18 @@ import { BulkImportDialog, type BulkApplyRow } from "./BulkImportDialog";
 import { PreflightDialog } from "./PreflightDialog";
 import { bulkSlotKey, mapBulkImport, type BulkImportFile, type BulkImportProposal } from "./core/bulk-import";
 import { validateProject, type PreflightIssue } from "./core/preflight";
-import {
-  applyBrandKit,
-  BRAND_KIT_STORAGE_KEY,
-  brandKitFromSettings,
-  normalizeBrandKit,
-  type BrandKit,
-} from "./core/brand-kit";
+import { applyBrandKit, brandKitFromSettings, type BrandKit } from "./core/brand-kit";
 import { compareRelease, createReleaseBaseline } from "./core/release";
 import { dimForSettings, getRenderFrame, paintSlide, paintStrip } from "./core/render";
 import { mirrorSpannedMedia, spanDeviceAcrossPair, updateSpannedComposition } from "./core/composition";
 import { outputForSettings } from "./core/output";
-import { FONT_OPTIONS, STORAGE_KEY, defaultState } from "./core/constants";
+import { FONT_OPTIONS, defaultState } from "./core/constants";
+import {
+  loadProject,
+  requestPersistence,
+  saveProject,
+  type StorageMode,
+} from "./storage/project";
 import { normalizeAppState, serializeTranslations } from "./core/normalize";
 import { getImageAsset, serializeMedia, setImageAsset } from "./core/media";
 import type { AppState, Background, ReleaseAssetComparison, Settings, Slide, SlideText } from "./core/types";
@@ -30,46 +30,13 @@ const HISTORY_LIMIT = 100;
 // ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------
-function loadState(): AppState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
-    return normalizeAppState(JSON.parse(raw));
-  } catch {
-    return defaultState();
-  }
-}
-
-function persistState(state: AppState): void {
-  try {
-    const payload = {
-      version: 2,
-      settings: state.settings,
-      releaseBaseline: state.releaseBaseline,
-      slides: state.slides.map((s) => ({
-        title: s.title,
-        subhead: s.subhead,
-        media: serializeMedia(s.media),
-        background: s.background,
-        composition: s.composition,
-        deviceSpan: s.deviceSpan,
-        translations: serializeTranslations(s.translations),
-      })),
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  } catch (e) {
-    console.warn("persist failed", e);
-  }
-}
-
-function loadBrandKits(): BrandKit[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(BRAND_KIT_STORAGE_KEY) ?? "[]");
-    return Array.isArray(parsed) ? parsed.map(normalizeBrandKit) : [];
-  } catch {
-    return [];
-  }
-}
+// Loading and persistence live in src/storage/project.ts: the project document
+// is small JSON in IndexedDB and its binaries are content-addressed blobs
+// alongside it. Saves are debounced because every keystroke used to trigger a
+// full multi-megabyte serialize, and a failure is surfaced rather than logged —
+// the previous localStorage path swallowed QuotaExceeded and lost the user's
+// work on the next reload with no warning at all.
+const SAVE_DEBOUNCE_MS = 400;
 
 // Return the slide with its title/subhead swapped to the active language's
 // translation. `lang === ""` is the source; any blank translated field falls
@@ -226,9 +193,11 @@ export function App() {
     issues: PreflightIssue[];
     pending?: () => void;
   } | null>(null);
-  const [brandKits, setBrandKits] = useState<BrandKit[]>(loadBrandKits);
+  const [brandKits, setBrandKits] = useState<BrandKit[]>([]);
   const [releaseRows, setReleaseRows] = useState<ReleaseAssetComparison[]>([]);
   const [releaseBusy, setReleaseBusy] = useState(false);
+  const [storageMode, setStorageMode] = useState<StorageMode>("indexeddb");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
@@ -241,14 +210,16 @@ export function App() {
   // Initial load + hydrate
   useEffect(() => {
     void (async () => {
-      const loaded = loadState();
-      const slides = await hydrateImages(loaded.slides);
-      const hydratedState = { ...loaded, slides };
+      const loaded = await loadProject();
+      const slides = await hydrateImages(loaded.state.slides);
+      const hydratedState = { ...loaded.state, slides };
       historyPast.current = [];
       historyFuture.current = [];
       historyCurrent.current = hydratedState;
       historyReady.current = true;
       setState(hydratedState);
+      setBrandKits(loaded.brandKits);
+      setStorageMode(loaded.mode);
       setHydrated(true);
       // Preload the curated fonts so previews look right — but skip heavy
       // (CJK) families, which load only when the user actually picks them.
@@ -258,11 +229,57 @@ export function App() {
     })();
   }, []);
 
-  // Persist on change
+  // Persist on change, debounced. `pending` holds the latest unsaved snapshot
+  // so the flush on tab-hide writes current data rather than a stale timer's.
+  const pendingSave = useRef<{ state: AppState; brandKits: BrandKit[] } | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushSave = useCallback(async () => {
+    const pending = pendingSave.current;
+    if (!pending) return;
+    pendingSave.current = null;
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    try {
+      await saveProject(pending.state, pending.brandKits, storageMode);
+      setSaveError(null);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    }
+  }, [storageMode]);
+
   useEffect(() => {
     if (!hydrated) return;
-    persistState(state);
-  }, [state, hydrated]);
+    pendingSave.current = { state, brandKits };
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void flushSave(), SAVE_DEBOUNCE_MS);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [state, brandKits, hydrated, flushSave]);
+
+  // A debounced save loses the last edit if the tab goes away mid-window.
+  useEffect(() => {
+    const flush = () => void flushSave();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [flushSave]);
+
+  // Ask the browser to exempt this origin from eviction once there is real work
+  // to protect. Best effort: some browsers require engagement and may refuse.
+  useEffect(() => {
+    if (!hydrated || storageMode !== "indexeddb") return;
+    void requestPersistence();
+  }, [hydrated, storageMode]);
 
   useEffect(() => {
     if (!hydrated || !historyReady.current || historyCurrent.current === state) return;
@@ -272,9 +289,8 @@ export function App() {
     historyCurrent.current = state;
     refreshHistoryControls((version) => version + 1);
   }, [state, hydrated]);
-  useEffect(() => {
-    localStorage.setItem(BRAND_KIT_STORAGE_KEY, JSON.stringify(brandKits));
-  }, [brandKits]);
+  // Brand kits persist with the project (their fonts are assets in the same
+  // store, and the sweep needs both as roots), so no separate write here.
 
   // Keep selection in bounds
   useEffect(() => {
@@ -909,6 +925,15 @@ export function App() {
           }}
           onClose={() => setPreflight(null)}
         />
+      )}
+      {saveError && (
+        <div className="save-error" role="alert">
+          <strong>Changes are not being saved.</strong>{" "}
+          {storageMode === "localstorage"
+            ? "This browser is blocking local storage, so this project is too large to keep. Export it now — it will be lost on reload."
+            : "Storing this project failed. Export it now to avoid losing work."}{" "}
+          <span className="save-error__detail">{saveError}</span>
+        </div>
       )}
     </>
   );

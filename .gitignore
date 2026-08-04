@@ -48,3 +48,6 @@ supabase/.temp/
 .wrangler
 .dev.vars*
 !.dev.vars.example
+
+# Agent worktrees
+.claude/worktrees/
