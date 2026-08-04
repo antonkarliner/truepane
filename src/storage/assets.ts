@@ -46,6 +46,12 @@ export function openDb(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
+/** Drops the memoized connection so a test can swap in a fresh IDBFactory.
+ * Not used by the app — `openDb` is memoized for the life of the page. */
+export function resetDbForTests(): void {
+  dbPromise = null;
+}
+
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -109,6 +115,30 @@ export async function listAssetIds(): Promise<string[]> {
   const store = db.transaction(ASSET_STORE, "readonly").objectStore(ASSET_STORE);
   const keys = await requestResult(store.getAllKeys());
   return keys.map(String);
+}
+
+/** Reads a JSON document (project, brand kits, migration marker) by key. */
+export async function getDocument<T>(key: string): Promise<T | null> {
+  const db = await openDb();
+  const store = db.transaction(DOCUMENT_STORE, "readonly").objectStore(DOCUMENT_STORE);
+  return ((await requestResult(store.get(key))) as T | undefined) ?? null;
+}
+
+export async function putDocument(key: string, value: unknown): Promise<void> {
+  const db = await openDb();
+  const transaction = db.transaction(DOCUMENT_STORE, "readwrite");
+  transaction.objectStore(DOCUMENT_STORE).put(value, key);
+  await txDone(transaction);
+}
+
+/** Re-encodes a stored blob as a data URL for the render path. */
+export function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 /**
