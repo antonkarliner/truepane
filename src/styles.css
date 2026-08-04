@@ -296,6 +296,11 @@ button { cursor: pointer; font: inherit; }
   gap: 12px;
   padding-top: 12px;
 }
+
+/* The custom shape family has five- and six-way pickers, which do not fit the
+   default inline-flex segmented control at sidebar width. */
+.custom-shape .segmented { display: flex; flex-wrap: wrap; width: 100%; }
+.custom-shape .segmented__btn { flex: 1 0 auto; padding: 6px 9px; }
 .compact-controls { gap: 0; }
 .optional-subsection {
   padding-top: 14px;

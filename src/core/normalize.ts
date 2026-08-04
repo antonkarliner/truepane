@@ -1,10 +1,21 @@
 // Pure normalization for persisted/imported project state. Shared between the
 // browser app (localStorage load, JSON import) and the Node MCP server, so the
 // two never diverge on how a saved project is healed.
-import { defaultState } from "./constants";
+import { DEFAULT_CUSTOM_SHAPE, defaultState } from "./constants";
 import { normalizeComposition } from "./composition";
 import { normalizeOutput } from "./output";
-import type { AppState, Background, BackgroundImage, ReleaseBaseline, Slide, SlideText, TargetMedia } from "./types";
+import type {
+  AppState,
+  Background,
+  BackgroundImage,
+  CustomShapeLayout,
+  CustomShapePrimitive,
+  CustomShapeSpec,
+  ReleaseBaseline,
+  Slide,
+  SlideText,
+  TargetMedia,
+} from "./types";
 
 // Merge a persisted/imported background onto current defaults, and migrate the
 // old single `pattern` field to the new fill + shape split.
@@ -12,6 +23,49 @@ const clamp01 = (value: unknown, fallback: number): number =>
   typeof value === "number" && Number.isFinite(value)
     ? Math.min(1, Math.max(0, value))
     : fallback;
+
+const CUSTOM_SHAPE_PRIMITIVES: CustomShapePrimitive[] = ["ring", "disc", "arc", "triangle", "bar", "blob"];
+const CUSTOM_SHAPE_LAYOUTS: CustomShapeLayout[] = ["scatter", "grid", "row", "radial", "wave"];
+
+const clampNum = (value: unknown, lo: number, hi: number, fallback: number): number =>
+  typeof value === "number" && Number.isFinite(value) ? Math.min(hi, Math.max(lo, value)) : fallback;
+
+/**
+ * Heal a custom shape spec: clamp every field into its documented range and
+ * coerce unknown enum strings back to the default.
+ *
+ * Agents will send junk. Every field is clamped rather than rejected so a
+ * sloppy call still renders something instead of failing the whole patch, and
+ * `count` — the one field that bounds an allocation — is clamped here before
+ * any generator reads it. `spacingX`/`spacingY` have a hard non-zero floor for
+ * the same reason: a zero lattice step is a degenerate layout.
+ *
+ * Also called from render.ts, so a spec that reaches the painter without going
+ * through project normalization (a hand-built MCP call, a legacy import) is
+ * bounded on the way in too.
+ */
+export function clampCustomShape(raw: unknown): CustomShapeSpec {
+  const src = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const d = DEFAULT_CUSTOM_SHAPE;
+  return {
+    primitive: CUSTOM_SHAPE_PRIMITIVES.includes(src.primitive as CustomShapePrimitive)
+      ? (src.primitive as CustomShapePrimitive)
+      : d.primitive,
+    layout: CUSTOM_SHAPE_LAYOUTS.includes(src.layout as CustomShapeLayout)
+      ? (src.layout as CustomShapeLayout)
+      : d.layout,
+    count: Math.round(clampNum(src.count, 1, 200, d.count)),
+    size: clampNum(src.size, 0, 1, d.size),
+    sizeJitter: clampNum(src.sizeJitter, 0, 1, d.sizeJitter),
+    rotation: clampNum(src.rotation, -180, 180, d.rotation),
+    rotationJitter: clampNum(src.rotationJitter, 0, 360, d.rotationJitter),
+    spacingX: clampNum(src.spacingX, 0.02, 2, d.spacingX),
+    spacingY: clampNum(src.spacingY, 0.02, 2, d.spacingY),
+    phase: clampNum(src.phase, 0, 1, d.phase),
+    strokeWidth: clampNum(src.strokeWidth, 0, 40, d.strokeWidth),
+    opacityRamp: clampNum(src.opacityRamp, -1, 1, d.opacityRamp),
+  };
+}
 
 // Heal a background image from persisted or MCP input. Anything malformed is
 // dropped entirely rather than half-applied: a background that references
@@ -65,6 +119,11 @@ export function normalizeBackground(raw: unknown): Background {
   const image = normalizeBackgroundImage((src as { image?: unknown }).image);
   if (image) b.image = image;
   else delete b.image;
+  // Same absent-stays-absent rule: a project that never used the custom family
+  // serializes byte-for-byte as it did before the family existed.
+  const rawCustom = (src as { customShape?: unknown }).customShape;
+  if (rawCustom && typeof rawCustom === "object") b.customShape = clampCustomShape(rawCustom);
+  else delete b.customShape;
   if (b.pattern) {
     if (b.pattern === "linear" || b.pattern === "radial") {
       b.fill = b.pattern;

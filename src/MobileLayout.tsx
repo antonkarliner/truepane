@@ -1,13 +1,13 @@
 // Mobile layout for Truepane — preview-first workflow with bottom sheet tabs.
 import { useEffect, useRef, useState } from "react";
-import { ColorRow, CompositionControls, Field, ImageDrop, LayoutSlider, Segmented, SlidePreview, TextInput } from "./components";
+import { ColorRow, CompositionControls, CustomShapeControls, Field, ImageDrop, LayoutSlider, Segmented, SlidePreview, TextInput } from "./components";
 import { BrandKitControls } from "./BrandKitControls";
 import { OutputFormatControl } from "./OutputFormatControl";
 import { ReleaseUpdateControls } from "./ReleaseUpdateControls";
 import { FILL_OPTIONS, PLATFORMS, RING_LAYOUTS, SHAPE_FAMILIES, dimForSettings } from "./core/render";
 import { accentSuggestions, extractPalette } from "./palette";
 import { aiConfigured, generateBackground, type AiProvider } from "./ai";
-import { BG_PRESETS, FONT_OPTIONS } from "./core/constants";
+import { BG_PRESETS, DEFAULT_CUSTOM_SHAPE, FONT_OPTIONS } from "./core/constants";
 import { getImageAsset, setImageAsset } from "./core/media";
 import type { AppState, Background, BackgroundFill, BackgroundImage, Composition, ReleaseAssetComparison, ShapeKind, Settings, Slide } from "./core/types";
 
@@ -259,6 +259,12 @@ export function MobileLayout(props: MobileLayoutProps) {
   const hasShape = bg.shape !== "none";
   const accentLabel = bg.shape === "rings" ? "Ring color" : "Shape color";
   const shapePresets = autoAccent ? accentSuggestions(bg.color) : DEFAULT_SHAPE_PRESETS;
+  // Mirrors the sidebar: the custom family has its own spec instead of the
+  // shared `density` slider, but stays seeded so Randomize still reshuffles it.
+  const isCustomShape = bg.shape === "custom";
+  const customSpec = bg.customShape ?? DEFAULT_CUSTOM_SHAPE;
+  const updateCustomShape = (patch: Partial<typeof customSpec>) =>
+    handleBgUpdate({ customShape: { ...customSpec, ...patch } });
 
   const matchPalette = () => {
     if (!activeAsset.image) return;
@@ -884,7 +890,14 @@ export function MobileLayout(props: MobileLayoutProps) {
                   </>
                 )}
 
-                {shapeMeta?.seeded && (
+                {/* The mobile background tab shows relevant controls inline
+                    rather than behind a disclosure, so the custom family's
+                    parameters follow its picker entry directly. */}
+                {isCustomShape && (
+                  <CustomShapeControls spec={customSpec} onChange={updateCustomShape} />
+                )}
+
+                {shapeMeta?.seeded && !isCustomShape && (
                   <Field label={`Density · ${bg.density ?? 3}`}>
                     <input
                       className="slider" type="range" min="1" max="8" step="1"
