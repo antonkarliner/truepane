@@ -4,14 +4,67 @@
 import { defaultState } from "./constants";
 import { normalizeComposition } from "./composition";
 import { normalizeOutput } from "./output";
-import type { AppState, Background, ReleaseBaseline, Slide, SlideText, TargetMedia } from "./types";
+import type { AppState, Background, BackgroundImage, ReleaseBaseline, Slide, SlideText, TargetMedia } from "./types";
 
 // Merge a persisted/imported background onto current defaults, and migrate the
 // old single `pattern` field to the new fill + shape split.
+const clamp01 = (value: unknown, fallback: number): number =>
+  typeof value === "number" && Number.isFinite(value)
+    ? Math.min(1, Math.max(0, value))
+    : fallback;
+
+// Heal a background image from persisted or MCP input. Anything malformed is
+// dropped entirely rather than half-applied: a background that references
+// bytes it cannot describe is worse than no background at all.
+function normalizeBackgroundImage(raw: unknown): BackgroundImage | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const src = raw as Record<string, unknown>;
+  const sourceRaw = src.source as Record<string, unknown> | undefined;
+  if (!sourceRaw || typeof sourceRaw !== "object") return undefined;
+
+  let source: BackgroundImage["source"];
+  if (sourceRaw.kind === "screenshot") {
+    source = { kind: "screenshot", blur: clamp01(sourceRaw.blur, 0.5) };
+  } else if (
+    typeof sourceRaw.id === "string" &&
+    typeof sourceRaw.dataUrl === "string" &&
+    sourceRaw.dataUrl
+  ) {
+    source = {
+      kind: "upload",
+      id: sourceRaw.id,
+      dataUrl: sourceRaw.dataUrl,
+      width: typeof sourceRaw.width === "number" ? sourceRaw.width : 0,
+      height: typeof sourceRaw.height === "number" ? sourceRaw.height : 0,
+    };
+  } else {
+    return undefined;
+  }
+
+  // A screenshot-derived background is inherently per-slide and always fills:
+  // clamp rather than trust, so a stray span never slices one slide's own
+  // screenshot across the strip.
+  const derived = source.kind === "screenshot";
+  return {
+    source,
+    span: !derived && src.span === "strip" ? "strip" : "slide",
+    fit: !derived && src.fit === "contain" ? "contain" : "cover",
+    opacity: clamp01(src.opacity, 1),
+    scrim: clamp01(src.scrim, 0),
+    scrimColor: typeof src.scrimColor === "string" ? src.scrimColor : "#000000",
+    meanLuminance: clamp01(src.meanLuminance, 0.5),
+  };
+}
+
 export function normalizeBackground(raw: unknown): Background {
   const base = defaultState().settings.background;
   const src = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const b = { ...base, ...src } as unknown as Background & { pattern?: string };
+  // Absent stays absent, so projects without an image serialize as they did
+  // before this feature existed.
+  const image = normalizeBackgroundImage((src as { image?: unknown }).image);
+  if (image) b.image = image;
+  else delete b.image;
   if (b.pattern) {
     if (b.pattern === "linear" || b.pattern === "radial") {
       b.fill = b.pattern;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   RING_LAYOUTS,
+  backgroundImageRect,
   defineFrame,
   getFrame,
   getLayout,
@@ -155,5 +156,52 @@ describe("layoutTextBlock", () => {
     const layout = layoutTextBlock(fakeCtx, slideWith("aa", "", composition), settings, frame);
     expect(layout.bounds.x).toBeCloseTo(0.2 * frame.W);
     expect(layout.bounds.w).toBeCloseTo(0.5 * frame.W);
+  });
+});
+
+describe("backgroundImageRect", () => {
+  const F = { W: 1000, H: 2000 } as Frame;
+
+  // The whole point of strip span: a long backdrop must flow across slide
+  // boundaries as one image. If consecutive slides are not offset by exactly
+  // one slide width, every seam shows a jump and the feature is worthless.
+  it("shifts by exactly one slide width per slide in strip span", () => {
+    const a = backgroundImageRect(4000, 2000, F, 4, 0, "strip", "cover");
+    const b = backgroundImageRect(4000, 2000, F, 4, 1, "strip", "cover");
+    const c = backgroundImageRect(4000, 2000, F, 4, 2, "strip", "cover");
+    expect(b.dx).toBeCloseTo(a.dx - F.W);
+    expect(c.dx).toBeCloseTo(b.dx - F.W);
+    expect(b.dy).toBeCloseTo(a.dy);
+    expect(b.dw).toBeCloseTo(a.dw);
+  });
+
+  // Cover must leave no gap; a letterboxed "cover" would show the fill through
+  // the edges of a photo the user expected to bleed.
+  it("always covers the destination box", () => {
+    for (const [iw, ih] of [[100, 4000], [4000, 100], [1000, 2000], [3, 7]]) {
+      const r = backgroundImageRect(iw, ih, F, 3, 1, "strip", "cover");
+      const boxW = F.W * 3;
+      expect(r.dw).toBeGreaterThanOrEqual(boxW - 0.001);
+      expect(r.dh).toBeGreaterThanOrEqual(F.H - 0.001);
+    }
+  });
+
+  it("never crops in contain", () => {
+    for (const [iw, ih] of [[100, 4000], [4000, 100], [1000, 2000]]) {
+      const r = backgroundImageRect(iw, ih, F, 1, 0, "slide", "contain");
+      expect(r.dw).toBeLessThanOrEqual(F.W + 0.001);
+      expect(r.dh).toBeLessThanOrEqual(F.H + 0.001);
+    }
+  });
+
+  it("is independent of slide index and count in slide span", () => {
+    const a = backgroundImageRect(1500, 1500, F, 1, 0, "slide", "cover");
+    const b = backgroundImageRect(1500, 1500, F, 9, 7, "slide", "cover");
+    expect(b).toEqual(a);
+  });
+
+  it("degrades to the box for a zero-sized image instead of dividing by zero", () => {
+    const r = backgroundImageRect(0, 0, F, 2, 0, "strip", "cover");
+    expect(Number.isFinite(r.dw) && Number.isFinite(r.dh)).toBe(true);
   });
 });
