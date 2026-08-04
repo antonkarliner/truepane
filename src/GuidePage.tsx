@@ -174,6 +174,14 @@ function CreateWithAgentsGuide() {
         or compare every slide by eye, then hand the edited project back to the agent.
       </p>
 
+      <h2>Continue from export to store delivery</h2>
+      <p>
+        Once the visual set is approved, follow the guide to
+        <a href="/guides/localize-and-publish-app-store-screenshots-with-ai-agent"> localizing and publishing screenshots with an AI agent</a>.
+        It adds translation review, a dry-run manifest, an upload approval gate, and remote
+        verification without putting store credentials inside Truepane.
+      </p>
+
       <aside>
         <strong>Privacy note.</strong> Truepane reads captures and writes exports locally.
         The app you build may still contact services configured in that app, so use demo
@@ -239,10 +247,139 @@ function LocalizedGuide() {
         <li>Export a changed-only ZIP and save the next baseline after approval.</li>
       </ol>
 
+      <h2>Ready to publish the localized set?</h2>
+      <p>
+        Continue with the end-to-end guide to
+        <a href="/guides/localize-and-publish-app-store-screenshots-with-ai-agent"> localizing and publishing screenshots through an AI agent</a>.
+        It keeps this local project workflow, then adds explicit store API delivery and
+        post-upload verification.
+      </p>
+
       <aside>
         <strong>Nothing needs to go to a design service.</strong> Browser composition,
         MCP rendering, projects, and simulator captures can all remain on your machine.
         Google Fonts may still load from Google unless you use a system or uploaded font.
+      </aside>
+    </>
+  );
+}
+
+function LocalizeAndPublishGuide() {
+  return (
+    <>
+      <p className="guide-eyebrow">Guide · Localization + publishing</p>
+      <h1>Localize and publish App Store screenshots with an AI agent and Truepane</h1>
+      <p className="guide-lead">
+        Use an agent to translate and assemble every locale, Truepane to validate and render
+        the screenshot matrix, and separately configured store tools to deliver the approved
+        assets. One workflow can reach App Store Connect and Google Play without giving
+        Truepane your publishing credentials.
+      </p>
+
+      <h2>What you need</h2>
+      <ul>
+        <li>A reviewed source-language Truepane project and the original app captures</li>
+        <li>Codex, Claude Code, or another MCP-capable agent with the Truepane server configured</li>
+        <li>An explicit list of targets, stores, and locale codes for this release</li>
+        <li>Existing App Store Connect or Google Play delivery tooling available to the agent</li>
+        <li>Store credentials configured through that tool’s normal secure environment—not pasted into a prompt</li>
+      </ul>
+
+      <h2>1. Freeze the release matrix</h2>
+      <p>
+        Start by listing every expected target, locale, and slide. Keep this matrix separate
+        from the files themselves so the agent can report missing combinations instead of
+        silently falling back to another language or device.
+      </p>
+      <Code>{`Prepare this Truepane project for App Store Connect and Google Play.
+
+Targets: iPhone 6.9, iPad 13, Android phone, Android tablet
+Locales: en-US, fr-FR, de-DE, ja-JP
+Slides: 5 per target and locale
+
+Inspect the source project and captures. Report missing targets, locale captures,
+fonts, or copy before changing anything. Do not translate, render, or upload yet.`}</Code>
+
+      <h2>2. Let the agent draft locale-aware copy</h2>
+      <p>
+        Ask for concise adaptation rather than literal translation. Preserve product names,
+        placeholders, and claims; respect the space available on each slide; and let the
+        locale use natural app-store language. Treat the result as an editorial draft until
+        a fluent reviewer has checked it.
+      </p>
+      <Code>{`Create draft screenshot titles and subtitles for every requested locale.
+Preserve meaning and product terminology, but adapt the phrasing naturally.
+Keep each line within the source copy's approximate visual length.
+Flag ambiguous terms instead of guessing. Apply approved translations to the
+Truepane project, but mark the locale set as awaiting linguistic review.`}</Code>
+
+      <h2>3. Attach the right capture and font to each locale</h2>
+      <p>
+        Localized copy does not guarantee a localized screenshot. Give each locale its own
+        app capture when the interface language changes. If source-capture fallback is
+        intentional, keep it visible in preflight. Choose a font with full coverage for the
+        locale’s script before rendering; do not assume browser fallback will match the
+        server-side output.
+      </p>
+
+      <h2>4. Review the project in two passes</h2>
+      <ol>
+        <li><strong>Linguistic review:</strong> meaning, terminology, tone, truncation, and regional wording.</li>
+        <li><strong>Visual review:</strong> hierarchy, line breaks, device crops, text expansion, contrast, and strip continuity.</li>
+      </ol>
+      <p>
+        Run <code>validate_project</code> across the complete matrix, render previews, and
+        import the editable JSON into the <a href="/editor">Truepane browser editor</a> when
+        a title or device needs manual adjustment. Return the edited project to the agent
+        before the final render.
+      </p>
+
+      <h2>5. Render an approval package</h2>
+      <p>
+        Render the store-size PNGs into folders organized by store, target, and locale.
+        Include a manifest with the expected remote destination, file order, dimensions,
+        and checksum or deterministic signature for each asset. This package becomes the
+        boundary between design work and an external write.
+      </p>
+      <Code>{`Render the approved target-locale matrix to /absolute/path/store-assets.
+Create a dry-run manifest that maps every PNG to its intended store, target,
+locale, and screenshot position. Include dimensions and checksums.
+Do not contact App Store Connect or Google Play. Stop for approval.`}</Code>
+
+      <h2>6. Approve the exact upload scope</h2>
+      <p>
+        Review the manifest before authorizing delivery. Confirm the app identifier, store,
+        target, locales, screenshot ordering, files to replace, and anything that must remain
+        untouched. Store upload is an external change; a successful local render is not proof
+        that the assets reached the intended listing.
+      </p>
+
+      <h2>7. Let the agent publish through configured store tools</h2>
+      <p>
+        After explicit approval, the agent can use the App Store Connect or Google Play API
+        client already configured in its environment. Truepane is not the credential holder
+        or uploader: it produced the validated assets and manifest that the agent now delivers.
+      </p>
+      <Code>{`The dry-run manifest is approved. Use the existing configured store API
+tools and credentials to upload only the assets in that manifest.
+
+Preserve the approved locale and screenshot order. Do not change descriptions,
+keywords, pricing, release state, or unrelated listing metadata. Do not submit
+the app or release for review. Report the result for every target and locale.`}</Code>
+
+      <h2>8. Verify the remote result</h2>
+      <ol>
+        <li>Read the screenshot state back from each store after upload.</li>
+        <li>Compare remote locale, target, count, order, and filenames with the manifest.</li>
+        <li>Report rejected or missing assets without silently retrying a different mapping.</li>
+        <li>Save the approved Truepane project as the next release baseline only after verification.</li>
+      </ol>
+
+      <aside>
+        <strong>Keep the trust boundary explicit.</strong> Truepane reads captures, validates
+        the project, and renders locally. Translation services and store APIs are contacted
+        only through tools the agent is separately authorized to use. Keep credentials in
+        those tools’ secure configuration and require approval before the upload step.
       </aside>
     </>
   );
@@ -377,7 +514,8 @@ render a preview, and stop for review. Do not upload anything.`}</Code>
         Export the edited JSON from the browser and ask the agent to <code>load_project</code>.
         It can add Android, create locale variants, compare with a saved release baseline,
         or render only changed assets. The JSON is the source of truth; PNGs are release
-        outputs, not the editable master.
+        outputs, not the editable master. For the complete next step, follow the guide to
+        <a href="/guides/localize-and-publish-app-store-screenshots-with-ai-agent"> localizing and publishing the approved set with an agent</a>.
       </p>
 
       <h2>A practical division of labor</h2>
@@ -416,7 +554,7 @@ function AppLaunchpadComparisonGuide() {
       <h2>Short answer</h2>
       <ul>
         <li><strong>Choose AppLaunchpad</strong> if 1,000+ templates, icons, illustrations, and a conventional hosted design workflow are the main attraction.</li>
-        <li><strong>Choose Truepane</strong> if you want local composition, no account, open-source code, editable JSON, release preflight, and Codex or Claude Code automation.</li>
+        <li><strong>Choose Truepane</strong> if you want an agent to orchestrate local composition, asset generation, localization, validation, and delivery while preserving an editable browser handoff.</li>
       </ul>
 
       <h2>Feature comparison</h2>
@@ -427,8 +565,8 @@ function AppLaunchpadComparisonGuide() {
           ["AI-agent workflow", "Documented local MCP server", "Not advertised on the public pages reviewed"],
           ["Manual editing", "Browser editor with free placement", "Browser editor with custom layouts"],
           ["Platforms", "iPhone, iPad, Android phone/tablet, feature graphic, custom output", "App Store and Google Play device sizes"],
-          ["Localization", "Multiple locales, per-locale copy/captures, preflight", "Duplicate designs and update language text"],
-          ["Assets", "Your images, generated backgrounds, brand kits", "1,000+ templates plus icon, SVG, image, and illustration libraries"],
+          ["Localization", "Agent-generated translations plus per-locale copy, captures, fonts, and preflight", "Built-in design duplication and language editing"],
+          ["Assets", "Agent-generated or supplied images, procedural backgrounds, and brand kits", "1,000+ built-in templates plus icon, SVG, image, and illustration libraries"],
           ["Data model", "Local project storage and portable JSON", "Hosted account workflow"],
           ["Price model", "Free and open source", "Free entry; paid plans are offered"],
         ]}
@@ -446,10 +584,11 @@ function AppLaunchpadComparisonGuide() {
       <h2>Where Truepane is different</h2>
       <p>
         Truepane can be operated by an MCP-capable coding agent without browser automation.
-        The agent can create a project, attach local captures, validate it, render a preview,
-        and export the same JSON the browser editor reads. Composition happens locally, and
-        the project can stay on your machine. That is useful when screenshot work is part of
-        a repository-driven release rather than a separate design task.
+        The agent can create and translate a project, generate or attach assets, validate it,
+        render a preview, and export the same JSON the browser editor reads. With the relevant
+        store tools and credentials, it can continue to delivery after rendering. Composition
+        stays local, which is useful when screenshot work is part of a repository-driven release
+        rather than a separate design task.
       </p>
 
       <h2>Which should an indie developer choose?</h2>
@@ -494,9 +633,9 @@ function PreviewedComparisonGuide() {
         rows={[
           ["Primary focus", "App Store and Google Play screenshot sets", "2D/3D device mockups and promo media"],
           ["Image export", "Store-size PNG, strip, ZIP, and changed-only output", "JPEG and PNG at plan-dependent resolution"],
-          ["Video and 3D", "No", "3D snapshots, animations, and MP4"],
+          ["Video and 3D", "Not built in; an agent can hand assets to specialized tools", "Built-in 3D snapshots, animations, and MP4"],
           ["AI-agent workflow", "Local MCP server and editable JSON handoff", "Not advertised on the public pages reviewed"],
-          ["Collaboration", "Portable project file; no hosted team workspace", "Team invitations and shared mockup groups"],
+          ["Collaboration", "Portable JSON for Git or file handoff; no built-in cloud workspace", "Built-in team invitations and shared mockup groups"],
           ["Storage", "Local browser/project storage", "Saved templates backed up in the cloud"],
           ["Pricing", "Free and open source", "Free 720p with attribution; paid export and subscription plans"],
         ]}
@@ -517,7 +656,9 @@ function PreviewedComparisonGuide() {
         can track targets, locales, capture fallbacks, typography, brand kits, and release
         baselines. Preflight calls out missing or risky combinations, while changed-only export
         helps with later releases. Codex or Claude Code can operate that workflow locally, then
-        hand the project to the browser for manual adjustments.
+        hand the project to the browser for manual adjustments. If a release also needs video,
+        3D, social assets, or store delivery, the same agent can coordinate specialized tools;
+        those outputs simply are not built into Truepane itself.
       </p>
 
       <h2>Price and license differences</h2>
@@ -544,17 +685,18 @@ function AppScreensComparisonGuide() {
   return (
     <>
       <p className="guide-eyebrow">Comparison · Reviewed August 2026</p>
-      <h1>Truepane vs AppScreens: local agent workflow or full store publishing pipeline?</h1>
+      <h1>Truepane vs AppScreens: agent-orchestrated release or built-in publishing?</h1>
       <p className="guide-lead">
         AppScreens is a mature hosted platform for templates, responsive sizing,
         localization, variants, and direct store upload. Truepane is a free open-source
-        tool for local composition and AI-agent automation without handing it publishing access.
+        tool where an AI agent can localize the set, render it locally, and continue to
+        store delivery through APIs or other release tools available to that agent.
       </p>
 
       <h2>Short answer</h2>
       <ul>
         <li><strong>Choose AppScreens</strong> for a large template catalog, many storefronts and locales, responsive resizing, or one-click App Store Connect and Google Play uploads.</li>
-        <li><strong>Choose Truepane</strong> for local files, portable project JSON, open-source code, release preflight, changed-only exports, and an MCP workflow.</li>
+        <li><strong>Choose Truepane</strong> when you want an agent to orchestrate capture, localization, design, validation, export, and—when equipped with the relevant store tools and credentials—delivery.</li>
       </ul>
 
       <h2>Feature comparison</h2>
@@ -563,8 +705,8 @@ function AppScreensComparisonGuide() {
         rows={[
           ["Workflow", "Browser editor plus local MCP agent", "Hosted responsive project editor"],
           ["Templates", "Focused layouts and procedural backgrounds", "150+ template sets and 500+ editable layouts advertised"],
-          ["Localization", "Per-locale copy, captures, fonts, fallbacks, and preflight", "5 locales on Pro; 80+ on Scale as listed"],
-          ["Store upload", "Manual export only", "Direct Apple and Google upload on paid plans"],
+          ["Localization", "Agent-generated translations plus per-locale copy, captures, fonts, fallbacks, and preflight", "Built-in localization: 5 locales on Pro; 80+ on Scale as listed"],
+          ["Store delivery", "Agent can upload exports through store APIs; no built-in publisher", "Direct Apple and Google upload on paid plans"],
           ["Release updates", "Baseline comparison and changed-only ZIP", "Variants, restyling, CPP/PPO workflows"],
           ["Agent/API", "Published MCP server for local agents", "Public site says API discussions are available on request"],
           ["Price model", "Free and open source", "Free Basic plus paid Pro and Scale plans"],
@@ -573,7 +715,7 @@ function AppScreensComparisonGuide() {
 
       <h2>Where AppScreens is stronger</h2>
       <p>
-        AppScreens covers more of the publishing pipeline. Its public pages advertise
+        AppScreens packages more of the publishing pipeline inside one product. Its public pages advertise
         responsive designs across phones, tablets, watches, feature graphics, and custom
         sizes; AI captions and translation; many localized markets; and direct upload to
         Apple and Google. Paid plans also add richer device scenes, custom fonts, bulk
@@ -582,20 +724,26 @@ function AppScreensComparisonGuide() {
 
       <h2>Where Truepane is different</h2>
       <p>
-        Truepane deliberately stops before store upload. Your coding agent can read local
-        captures, create and validate the set, render previews, and save outputs locally.
-        You can open the same JSON in the browser, make visual changes, and return it to the
-        agent. This smaller trust boundary can be preferable when release credentials and
-        screenshot design should remain separate.
+        Truepane itself does not contain a store publisher, but the agent workflow does not
+        have to stop at export. Your coding agent can read local captures, create and translate
+        the set, validate every locale, render outputs, and then use App Store Connect or Google
+        Play API tooling available in its environment to upload them. You can still open the
+        same JSON in the browser for manual design changes. This keeps store credentials outside
+        Truepane while allowing one agent to coordinate the complete release.
+      </p>
+      <p>
+        See the full workflow for
+        <a href="/guides/localize-and-publish-app-store-screenshots-with-ai-agent"> localizing, approving, and publishing a Truepane project with an agent</a>.
       </p>
 
       <h2>Which workflow costs less?</h2>
       <p>
         Truepane is free under AGPL-3.0 and does not meter projects or exports. On 5 August
         2026, AppScreens listed a free Basic plan, Pro at US$8.25 per month when billed
-        annually, and Scale at US$15 per month when billed annually. The paid plans fund
-        capabilities Truepane does not provide, especially large-scale localization and
-        direct publishing, so compare the repeated work rather than the subscription alone.
+        annually, and Scale at US$15 per month when billed annually. Those plans package
+        localization and publishing into the AppScreens interface. Truepane shifts the same
+        repetitive work to an agent and its connected tools, so compare setup, control,
+        credential boundaries, and template breadth rather than the subscription alone.
       </p>
 
       <RelatedComparisons current="truepane-vs-appscreens" />
@@ -624,12 +772,12 @@ function ScreenshotsProComparisonGuide() {
       <ComparisonTable
         headers={["Area", "Truepane", "Screenshots.pro"]}
         rows={[
-          ["Automation", "Local MCP tools for agent-driven projects", "REST API on Extended plan"],
+          ["Automation", "Local MCP tools; the agent can coordinate other release APIs", "Hosted REST API on Extended plan"],
           ["Editor", "Local-rendering browser editor", "Hosted editor with templates and auto-save"],
           ["Output sizing", "Apple, Google, feature graphic, and bounded custom sizes", "Smart export for all sizes"],
-          ["Localization", "Included with per-locale preflight", "Listed on Standard and Extended plans"],
+          ["Localization", "Agent-generated translations with per-locale preflight", "Built-in localization on Standard and Extended plans"],
           ["Custom fonts", "System, Google, or uploaded fonts", "Listed on Standard and Extended plans"],
-          ["Client work", "Review AGPL obligations for your deployment", "Extended license explicitly permits charging clients"],
+          ["Client work", "No separate client-output license tier; review AGPL if modifying or providing the software", "Extended license explicitly permits charging clients"],
           ["Price model", "Free and open source", "Free Basic; paid Standard and Extended"],
         ]}
       />
@@ -648,7 +796,8 @@ function ScreenshotsProComparisonGuide() {
         Truepane’s MCP server is designed for conversational agents rather than a remote
         rendering API. Captures and outputs use local paths; the browser and server share
         editable project JSON; and release preflight can check every target, locale, and
-        slide before export. There is no hosted project account or per-export plan.
+        slide before export. The agent can then coordinate store APIs or other release tools
+        available in its environment. There is no hosted project account or per-export plan.
       </p>
 
       <h2>Pricing and licensing need separate checks</h2>
@@ -678,8 +827,9 @@ function AppMockUpComparisonGuide() {
       <h1>Truepane vs AppMockUp: two free ways to design App Store screenshots</h1>
       <p className="guide-lead">
         AppMockUp offers a conventional layered visual editor without requiring an account.
-        Truepane adds a local AI-agent workflow, portable project files, localization checks,
-        and release-oriented exports. Both are reasonable starting points for indie apps.
+        Truepane adds a local AI-agent workflow that can coordinate captures, localization,
+        release checks, exports, and store delivery around a portable project file. Both are
+        reasonable starting points for indie apps.
       </p>
 
       <h2>Feature comparison</h2>
@@ -707,9 +857,10 @@ function AppMockUpComparisonGuide() {
       <h2>Where Truepane is different</h2>
       <p>
         Truepane connects the visual editor to a release workflow. An agent can capture or
-        import files from predictable folders, compose the first version, validate missing
-        target-locale combinations, and render native outputs. A human can then adjust the
-        same project in the browser and hand it back for repetitive localization or exports.
+        import files from predictable folders, compose and translate the first version,
+        validate missing target-locale combinations, and render native outputs. A human can
+        then adjust the same project in the browser and hand it back for repetitive localization,
+        exports, or API delivery through other tools available to the agent.
       </p>
 
       <h2>How to decide</h2>
@@ -745,10 +896,10 @@ function ScreenshotGeneratorsComparisonGuide() {
       <ComparisonTable
         headers={["Tool", "Best fit", "Notable trade-off"]}
         rows={[
-          ["Truepane", "Local agent-to-browser releases", "Smaller template/device catalog; no direct store upload or 3D video"],
+          ["Truepane", "Agent-orchestrated localization and releases", "No built-in store publisher or 3D video; delivery depends on the agent’s connected tools"],
           ["AppLaunchpad", "Large template and asset library", "Hosted workflow; review current plan limits"],
-          ["Previewed", "3D mockups, animation, and promo video", "Store-release management is not its only focus"],
-          ["AppScreens", "Localization and direct store uploads at scale", "Advanced workflows are paid"],
+          ["Previewed", "Built-in 3D mockups, animation, and promo video", "Store-release management is not its only focus"],
+          ["AppScreens", "Built-in localization and direct store uploads", "Advanced workflows are paid"],
           ["Screenshots.pro", "Templates plus API access for client/automation work", "Localization, custom fonts, API, and licensing vary by paid tier"],
           ["AppMockUp", "Free visual editing without an account", "Check its current export and advanced-workflow fit yourself"],
         ]}
@@ -760,6 +911,7 @@ function ScreenshotGeneratorsComparisonGuide() {
         MCP server lets Codex, Claude Code, and other agents build, validate, localize, and
         render the same editable project. It is the clearest fit when screenshot generation
         belongs inside a software release workflow and you still want manual visual control.
+        The <a href="/guides/localize-and-publish-app-store-screenshots-with-ai-agent">localization and publishing guide</a> shows how the agent can continue through store delivery.
       </p>
 
       <h2>2. AppLaunchpad: best for browsing a large ready-made catalog</h2>
@@ -774,15 +926,19 @@ function ScreenshotGeneratorsComparisonGuide() {
       <p>
         Previewed spans 2D screenshots, 3D snapshots, device animations, MP4 video, social
         formats, cloud template storage, and team sharing. It is the most natural choice in
-        this list when store screenshots are only one part of a wider launch-media package.
+        this list when you want those launch-media outputs built into one editor. A Truepane
+        agent can coordinate separate 3D or video tools, but Truepane does not render those
+        formats itself.
       </p>
 
-      <h2>4. AppScreens: best for localization and store upload</h2>
+      <h2>4. AppScreens: best for built-in localization and store upload</h2>
       <p>
         AppScreens advertises responsive layouts across many store sizes, 150+ template sets,
         AI captions and translation, 80+ localizations on its Scale tier, and direct upload
         to App Store Connect and Google Play on paid plans. Teams shipping many languages or
-        variants may value that operational breadth more than local-only processing.
+        variants may value having that workflow inside one hosted product. Truepane can cover
+        localization and delivery through an agent, but the agent needs the relevant translation,
+        store API tooling, and credentials in its environment.
       </p>
 
       <h2>5. Screenshots.pro: best when API access or client licensing matters</h2>
@@ -831,6 +987,11 @@ export const GUIDE_REGISTRY = {
     title: "Update localized App Store screenshots locally · Truepane",
     description: "Repeat deterministic captures across locales and render only the assets that changed.",
     component: LocalizedGuide,
+  },
+  "localize-and-publish-app-store-screenshots-with-ai-agent": {
+    title: "Localize and publish App Store screenshots with an AI agent · Truepane",
+    description: "Use an AI agent and Truepane to translate, validate, render, approve, and publish localized store screenshots through configured APIs.",
+    component: LocalizeAndPublishGuide,
   },
   "build-one-continuous-background-across-app-store-screenshots": {
     title: "Build one continuous background across App Store screenshots · Truepane",
