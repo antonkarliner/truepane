@@ -214,6 +214,46 @@ export function textPolygon(bounds: TextBounds, rotation: number): Point[] {
 }
 
 /**
+ * Fraction of the text block hidden behind the device, 0..1.
+ *
+ * `paintSlide` draws text before the device, so any overlap is text the user
+ * cannot read. Free placement makes it easy to park a headline under the phone
+ * by accident — on canvas the drag outline stays visible while the text itself
+ * disappears.
+ *
+ * Sampled on a coarse grid rather than solved analytically: both shapes are
+ * convex quads, the result only drives a warning threshold, and sampling keeps
+ * rotation handling free.
+ */
+export function textCoveredByDevice(
+  bounds: TextBounds,
+  rotation: number,
+  composition: ResolvedComposition,
+  frame: Frame,
+  steps = 5,
+): number {
+  if (bounds.w <= 0 || bounds.h <= 0) return 0;
+  const device = devicePolygon(composition, frame);
+  const corners = textPolygon(bounds, rotation);
+  // Bilinear interpolation across the (possibly rotated) text quad.
+  const [tl, tr, br, bl] = corners;
+  let covered = 0;
+  let total = 0;
+  for (let i = 0; i < steps; i++) {
+    const v = (i + 0.5) / steps;
+    for (let j = 0; j < steps; j++) {
+      const u = (j + 0.5) / steps;
+      const top = { x: tl.x + (tr.x - tl.x) * u, y: tl.y + (tr.y - tl.y) * u };
+      const bottom = { x: bl.x + (br.x - bl.x) * u, y: bl.y + (br.y - bl.y) * u };
+      const point = { x: top.x + (bottom.x - top.x) * v, y: top.y + (bottom.y - top.y) * v };
+      total++;
+      if (pointInPolygon(point, device)) covered++;
+    }
+  }
+  return total ? covered / total : 0;
+}
+
+/**
  * Keep a fraction of the text block on canvas. Text is the readable payload,
  * so the default keeps more of it visible than the device's 0.2 — a title
  * dragged 90% off the edge is never intentional.
