@@ -315,6 +315,42 @@ function legacyPayload(state: AppState): unknown {
 // Durability / headroom
 // ---------------------------------------------------------------------------
 
+const EVICTION_NOTICE_KEY = "truepane-storage-notice-dismissed";
+
+/**
+ * True on WebKit, where stored projects have an expiry date.
+ *
+ * Safari's ITP deletes *all* script-writable storage for an origin with no user
+ * interaction in the last seven days of browser use — IndexedDB and
+ * localStorage alike. `navigator.storage.persist()` does not reliably exempt
+ * you, so this is a fact to tell the user about rather than a bug to fix.
+ *
+ * Every iOS browser is WebKit underneath, so this deliberately matches more
+ * than desktop Safari. Chromium on macOS reports a different vendor.
+ */
+export function storageMayBeEvicted(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const webkitVendor = navigator.vendor === "Apple Computer, Inc.";
+  const iOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+  return webkitVendor || iOS;
+}
+
+export function evictionNoticeDismissed(): boolean {
+  try {
+    return localStorage.getItem(EVICTION_NOTICE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function dismissEvictionNotice(): void {
+  try {
+    localStorage.setItem(EVICTION_NOTICE_KEY, "1");
+  } catch {
+    // If even this fails the notice simply returns next time, which is fine.
+  }
+}
+
 export async function requestPersistence(): Promise<boolean> {
   try {
     if (!navigator.storage?.persist) return false;

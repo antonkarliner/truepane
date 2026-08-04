@@ -15,9 +15,12 @@ import { mirrorSpannedMedia, spanDeviceAcrossPair, updateSpannedComposition } fr
 import { outputForSettings } from "./core/output";
 import { FONT_OPTIONS, defaultState } from "./core/constants";
 import {
+  dismissEvictionNotice,
+  evictionNoticeDismissed,
   loadProject,
   requestPersistence,
   saveProject,
+  storageMayBeEvicted,
   type StorageMode,
 } from "./storage/project";
 import { normalizeAppState, serializeTranslations } from "./core/normalize";
@@ -198,6 +201,9 @@ export function App() {
   const [releaseBusy, setReleaseBusy] = useState(false);
   const [storageMode, setStorageMode] = useState<StorageMode>("indexeddb");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [evictionNotice, setEvictionNotice] = useState(
+    () => storageMayBeEvicted() && !evictionNoticeDismissed(),
+  );
 
   const toggleTheme = useCallback(() => {
     setTheme((t) => {
@@ -925,6 +931,27 @@ export function App() {
           }}
           onClose={() => setPreflight(null)}
         />
+      )}
+      {/* Only once the user has something to lose — a warning on an untouched
+          default project is noise. */}
+      {evictionNotice && state.slides.some((slide) => !!slide.media) && (
+        <div className="storage-notice" role="status">
+          <div>
+            <strong>Safari clears saved projects after 7 days of not visiting.</strong>{" "}
+            That applies to every site, not just this one. Your work stays in this
+            browser until then — use <em>Export project (JSON)</em> to keep a copy
+            you own.
+          </div>
+          <button
+            className="ghost small"
+            onClick={() => {
+              dismissEvictionNotice();
+              setEvictionNotice(false);
+            }}
+          >
+            Got it
+          </button>
+        </div>
       )}
       {saveError && (
         <div className="save-error" role="alert">
