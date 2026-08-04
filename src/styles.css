@@ -857,7 +857,7 @@ button { cursor: pointer; font: inherit; }
   align-items: center;
   gap: 10px;
   color: rgba(26,22,18,0.58);
-  font-size: 12px;
+  font-size: 14px;
 }
 .welcome__open-source a {
   padding: 5px 9px;
@@ -866,6 +866,7 @@ button { cursor: pointer; font: inherit; }
   color: #1a1612;
   font-weight: 600;
   text-decoration: none;
+  white-space: nowrap;
 }
 .welcome__intro > span {
   display: block;
@@ -976,6 +977,25 @@ button { cursor: pointer; font: inherit; }
 .welcome-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .welcome-preview--editor-showcase {
   background: #f6f3ed;
+}
+.welcome-strip {
+  grid-column: 1 / -1;
+  position: relative;
+  z-index: 1;
+  padding: 30px 48px 26px;
+  background: #f9f7f2; /* opaque: hides the column divider behind the band */
+}
+.welcome-strip img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(26,22,18,0.14);
+  border-radius: 9px;
+}
+.welcome-strip p {
+  margin: 12px 0 0;
+  color: rgba(26,22,18,0.58);
+  font-size: 13px;
 }
 .welcome__footer {
   grid-column: 1 / -1;
@@ -1191,6 +1211,8 @@ button { cursor: pointer; font: inherit; }
   .welcome-path__button,
   .welcome-path__button--primary,
   .welcome-command { max-width: none; }
+  /* the strip is unreadable below ~800px; the editor preview still carries the proof */
+  .welcome-strip { display: none; }
   .welcome__footer { display: none; }
   .setup-backdrop { padding: 12px; align-items: end; }
   .setup-modal { max-height: calc(100dvh - 24px); }
@@ -1661,6 +1683,9 @@ body[data-route="guide"] > .site-footer { display: none; }
   background: #1e1b22;
   color: #f0ece4;
 }
+[data-theme="dark"] .welcome-strip { background: #1e1b22; }
+[data-theme="dark"] .welcome-strip img { border-color: rgba(255,255,255,0.13); }
+[data-theme="dark"] .welcome-strip p { color: rgba(240,236,228,0.58); }
 [data-theme="dark"] .welcome__skip,
 [data-theme="dark"] .welcome-command span,
 [data-theme="dark"] .welcome__intro > p:not(.welcome__eyebrow),
@@ -1732,6 +1757,7 @@ body[data-route="guide"] > .site-footer { display: none; }
 [data-theme="dark"] .seo-content details p,
 [data-theme="dark"] .seo-content__mcp > p,
 [data-theme="dark"] .seo-content__mcp p.seo-content__mcp-links,
+[data-theme="dark"] .seo-content__guide-list p,
 [data-theme="dark"] .site-footer { color: rgba(240,236,228,0.64); }
 [data-theme="dark"] .seo-content__grid,
 [data-theme="dark"] .seo-content article,

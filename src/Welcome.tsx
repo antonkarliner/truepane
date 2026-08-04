@@ -202,7 +202,7 @@ export function Welcome({ onOpenEditor }: { onOpenEditor: () => void }) {
         <section className="welcome-path welcome-path--mcp">
           <p className="welcome-path__label">Recommended</p>
           <h2>Hand the release set to your agent</h2>
-          <p>Let Codex, Claude Code, or another MCP-capable agent import captures, compose every slide, localize the set, run preflight, and render only what changed.</p>
+          <p>Let Codex, Claude Code, or another MCP-capable agent import captures, compose every slide and background, localize the set, run preflight, and render only what changed.</p>
           <div className="welcome-command">
             <span>Terminal</span>
             <code>npx -y truepane-mcp</code>
@@ -214,11 +214,11 @@ export function Welcome({ onOpenEditor }: { onOpenEditor: () => void }) {
 
         <section className="welcome-path welcome-path--editor">
           <h2>Compose every slide visually</h2>
-          <p>Drag, resize, and rotate devices; span one mockup across two slides; reuse brand kits; and preview every target before export.</p>
+          <p>Place text and devices anywhere, span one across two slides, drop in your own backdrop or generate one, and reuse it all as a brand kit.</p>
           <div
             className="welcome-preview welcome-preview--editor-showcase"
             role="img"
-            aria-label="Truepane editor with a rotated mobile device spanning two slides"
+            aria-label="Truepane editor composing a set whose backdrop image runs continuously across every slide"
           >
             <img
               src={theme === "dark" ? "/welcome-editor-preview-dark.png" : "/welcome-editor-preview.png"}
@@ -230,6 +230,18 @@ export function Welcome({ onOpenEditor }: { onOpenEditor: () => void }) {
           </button>
         </section>
 
+        <section className="welcome-strip">
+          <img
+            src="/welcome-strip-continuity.jpg"
+            alt="Seven App Store slides sharing one backdrop that runs unbroken across the set"
+            loading="lazy"
+            decoding="async"
+            width={2400}
+            height={745}
+          />
+          <p>One backdrop, seven slides, exported as one continuous strip.</p>
+        </section>
+
         <footer className="welcome__footer">
           <div className="welcome__footer-item">
             <FileCodeIcon size={28} weight="light" aria-hidden="true" />
@@ -237,7 +249,7 @@ export function Welcome({ onOpenEditor }: { onOpenEditor: () => void }) {
           </div>
           <div className="welcome__footer-item welcome__footer-item--privacy">
             <ShieldCheckIcon size={28} weight="light" aria-hidden="true" />
-            <span>No API keys. Nothing uploaded.</span>
+            <span>No API keys. Nothing uploaded. Full-resolution sets, however big.</span>
           </div>
         </footer>
       </div>
