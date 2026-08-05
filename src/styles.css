@@ -925,7 +925,7 @@ button { cursor: pointer; font: inherit; }
   overflow: hidden;
   background: rgba(255,255,255,0.34);
 }
-.welcome-command span {
+.welcome-command__heading {
   display: block;
   padding: 10px 14px;
   border-bottom: 1px solid rgba(26,22,18,0.12);
@@ -935,11 +935,27 @@ button { cursor: pointer; font: inherit; }
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.welcome-command code {
-  display: block;
-  padding: 18px 20px;
+.welcome-command__row {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 14px;
+  padding: 14px 18px;
+}
+.welcome-command__row + .welcome-command__row {
+  border-top: 1px solid rgba(26,22,18,0.12);
+}
+.welcome-command__row span {
+  color: rgba(26,22,18,0.58);
   font-family: "Roboto Mono", ui-monospace, monospace;
-  font-size: 15px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.welcome-command__row code {
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.55;
 }
 .welcome-path__button {
   width: 100%;
@@ -1235,8 +1251,8 @@ button { cursor: pointer; font: inherit; }
   .welcome__table { margin-top: 26px; }
   .welcome-path { padding-top: 20px; padding-bottom: 18px; }
   .welcome-command { margin-top: 16px; }
-  .welcome-command span { padding-top: 7px; padding-bottom: 7px; }
-  .welcome-command code { padding-top: 13px; padding-bottom: 13px; }
+  .welcome-command__heading { padding-top: 7px; padding-bottom: 7px; }
+  .welcome-command__row { padding-top: 10px; padding-bottom: 10px; }
   .welcome-preview { height: 200px; aspect-ratio: auto; }
   .welcome-path__button { min-height: 48px; margin-top: 14px; }
   .welcome__footer-item { min-height: 54px; }
@@ -1402,6 +1418,7 @@ body[data-route="guide"] > .site-footer { display: none; }
   gap: clamp(56px, 9vw, 150px);
   padding-top: 68px;
 }
+.seo-content__lower > * { min-width: 0; }
 .seo-content__mcp {
   max-width: 600px;
 }
@@ -1432,6 +1449,24 @@ body[data-route="guide"] > .site-footer { display: none; }
 }
 .seo-content__code code {
   font-family: inherit;
+}
+.seo-content__commands {
+  margin-top: 20px;
+  display: grid;
+  gap: 10px;
+}
+.seo-content__commands > div { min-width: 0; }
+.seo-content__commands > div > span {
+  display: block;
+  margin-bottom: 6px;
+  color: rgba(26,22,18,0.58);
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.seo-content__commands .seo-content__code {
+  margin-top: 0;
 }
 .seo-content__mcp p.seo-content__mcp-links {
   margin-top: 16px;
@@ -1823,6 +1858,7 @@ body[data-route="guide"] > .site-footer { display: none; }
 }
 [data-theme="dark"] .seo-content__lead,
 [data-theme="dark"] .seo-content__eyebrow,
+[data-theme="dark"] .seo-content__commands > div > span,
 [data-theme="dark"] .seo-content article p,
 [data-theme="dark"] .seo-content details p,
 [data-theme="dark"] .seo-content__mcp > p,

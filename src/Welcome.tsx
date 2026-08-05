@@ -7,8 +7,8 @@ type SetupClient = "codex" | "claude" | "agent";
 const setupDetails: Record<SetupClient, { label: string; intro: string; copy: string; next: string }> = {
   codex: {
     label: "Codex",
-    intro: "Add this block to ~/.codex/config.toml:",
-    copy: `[mcp_servers.truepane]\ncommand = "npx"\nargs = ["-y", "truepane-mcp"]`,
+    intro: "Run this command in your terminal:",
+    copy: "codex mcp add truepane -- npx -y truepane-mcp",
     next: "Restart Codex, then ask it to list the available Truepane tools.",
   },
   claude: {
@@ -204,8 +204,15 @@ export function Welcome({ onOpenEditor }: { onOpenEditor: () => void }) {
           <h2>Hand the release set to your agent</h2>
           <p>Let Codex, Claude Code, or another MCP-capable agent import captures, compose every slide and background, localize the set, run preflight, and render only what changed.</p>
           <div className="welcome-command">
-            <span>Terminal</span>
-            <code>npx -y truepane-mcp</code>
+            <span className="welcome-command__heading">One-shot setup</span>
+            <div className="welcome-command__row">
+              <span>Codex</span>
+              <code>codex mcp add truepane -- npx -y truepane-mcp</code>
+            </div>
+            <div className="welcome-command__row">
+              <span>Claude</span>
+              <code>claude mcp add truepane -- npx -y truepane-mcp</code>
+            </div>
           </div>
           <button className="welcome-path__button welcome-path__button--primary" onClick={() => setSetupOpen(true)}>
             Set up Truepane MCP <span aria-hidden="true">→</span>
