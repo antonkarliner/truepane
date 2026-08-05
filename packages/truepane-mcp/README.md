@@ -51,10 +51,16 @@ It's a standard stdio MCP server — any MCP-capable client can launch it with
 **Claude Code**
 
 ```sh
-claude mcp add truepane -- npx -y truepane-mcp
+claude mcp add --scope user truepane -- npx -y truepane-mcp
 ```
 
-**Codex CLI** — add to `~/.codex/config.toml`:
+**Codex CLI**
+
+```sh
+codex mcp add truepane -- npx -y truepane-mcp
+```
+
+Or configure Codex manually in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.truepane]
@@ -72,6 +78,8 @@ client's `mcpServers` block:
   }
 }
 ```
+
+Restart the client, then confirm that the Truepane tools are available.
 
 ## Recommended agent workflow
 

@@ -917,46 +917,33 @@ button { cursor: pointer; font: inherit; }
   font-size: 14px;
   line-height: 1.6;
 }
-.welcome-command {
+.welcome-setup-hint {
   max-width: 600px;
   margin-top: 24px;
-  border: 1px solid rgba(26,22,18,0.16);
-  border-radius: 9px;
-  overflow: hidden;
-  background: rgba(255,255,255,0.34);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(26,22,18,0.62);
 }
-.welcome-command__heading {
-  display: block;
-  padding: 10px 14px;
-  border-bottom: 1px solid rgba(26,22,18,0.12);
-  color: rgba(26,22,18,0.58);
-  font-family: "Roboto Mono", ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.welcome-command__row {
+.welcome-setup-hint__terminal {
+  width: 31px;
+  height: 31px;
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr);
-  align-items: baseline;
-  gap: 14px;
-  padding: 14px 18px;
-}
-.welcome-command__row + .welcome-command__row {
-  border-top: 1px solid rgba(26,22,18,0.12);
-}
-.welcome-command__row span {
-  color: rgba(26,22,18,0.58);
+  place-items: center;
+  border: 1px solid rgba(26,22,18,0.18);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.34);
+  color: #1a1612;
   font-family: "Roboto Mono", ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 11px;
 }
-.welcome-command__row code {
-  font-family: "Roboto Mono", ui-monospace, monospace;
-  font-size: 12px;
-  line-height: 1.55;
+.welcome-setup-hint p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
 }
+.welcome-setup-hint strong { color: #1a1612; font-weight: 600; }
 .welcome-path__button {
   width: 100%;
   min-height: 54px;
@@ -1227,8 +1214,7 @@ button { cursor: pointer; font: inherit; }
   .welcome-path { padding: 28px 0; }
   .welcome-path--mcp { border-right: 0; border-bottom: 1px solid rgba(26,22,18,0.14); }
   .welcome-path__button,
-  .welcome-path__button--primary,
-  .welcome-command { max-width: none; }
+  .welcome-path__button--primary { max-width: none; }
   /* the strip is unreadable below ~800px; the editor preview still carries the proof */
   .welcome-strip { display: none; }
   .welcome__footer { display: none; }
@@ -1250,9 +1236,7 @@ button { cursor: pointer; font: inherit; }
   .welcome__intro { margin-top: 32px; }
   .welcome__table { margin-top: 26px; }
   .welcome-path { padding-top: 20px; padding-bottom: 18px; }
-  .welcome-command { margin-top: 16px; }
-  .welcome-command__heading { padding-top: 7px; padding-bottom: 7px; }
-  .welcome-command__row { padding-top: 10px; padding-bottom: 10px; }
+  .welcome-setup-hint { margin-top: 16px; }
   .welcome-preview { height: 200px; aspect-ratio: auto; }
   .welcome-path__button { min-height: 48px; margin-top: 14px; }
   .welcome__footer-item { min-height: 54px; }
@@ -1792,10 +1776,10 @@ body[data-route="guide"] > .site-footer { display: none; }
 [data-theme="dark"] .welcome-strip img { border-color: rgba(255,255,255,0.13); }
 [data-theme="dark"] .welcome-strip p { color: rgba(240,236,228,0.58); }
 [data-theme="dark"] .welcome__skip,
-[data-theme="dark"] .welcome-command span,
 [data-theme="dark"] .welcome__intro > p:not(.welcome__eyebrow),
 [data-theme="dark"] .welcome__intro > span,
 [data-theme="dark"] .welcome-path > p:not(.welcome-path__label),
+[data-theme="dark"] .welcome-setup-hint,
 [data-theme="dark"] .welcome__footer,
 [data-theme="dark"] .setup-modal__header p,
 [data-theme="dark"] .setup-step p,
@@ -1809,8 +1793,6 @@ body[data-route="guide"] > .site-footer { display: none; }
 [data-theme="dark"] .setup-modal__footer a { color: #f0ece4; }
 [data-theme="dark"] .welcome-path--mcp,
 [data-theme="dark"] .welcome__table::before,
-[data-theme="dark"] .welcome-command,
-[data-theme="dark"] .welcome-command span,
 [data-theme="dark"] .welcome-preview,
 [data-theme="dark"] .welcome__footer,
 [data-theme="dark"] .welcome__footer-item--privacy,
@@ -1822,8 +1804,13 @@ body[data-route="guide"] > .site-footer { display: none; }
 [data-theme="dark"] .setup-code button,
 [data-theme="dark"] .setup-modal__footer { border-color: rgba(255,255,255,0.13); }
 [data-theme="dark"] .welcome__table::before { background: rgba(255,255,255,0.13); }
-[data-theme="dark"] .welcome-command,
 [data-theme="dark"] .setup-code { background: rgba(255,255,255,0.04); }
+[data-theme="dark"] .welcome-setup-hint__terminal {
+  border-color: rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.04);
+  color: #f0ece4;
+}
+[data-theme="dark"] .welcome-setup-hint strong { color: #f0ece4; }
 [data-theme="dark"] .setup-code button { background: rgba(255,255,255,0.10); }
 [data-theme="dark"] .welcome-preview { background: #272330; }
 [data-theme="dark"] .welcome__open-source { color: rgba(240,236,228,0.56); }

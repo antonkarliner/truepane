@@ -200,10 +200,16 @@ the common ones:
 **Claude Code**
 
 ```sh
-claude mcp add truepane -- npx -y truepane-mcp
+claude mcp add --scope user truepane -- npx -y truepane-mcp
 ```
 
-**Codex CLI** — add to `~/.codex/config.toml`:
+**Codex CLI**
+
+```sh
+codex mcp add truepane -- npx -y truepane-mcp
+```
+
+Or configure Codex manually in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.truepane]
@@ -222,6 +228,8 @@ client's `mcpServers` block (e.g. `.cursor/mcp.json`,
   }
 }
 ```
+
+Restart the client, then confirm that the Truepane tools are available.
 
 The server lives in [`packages/truepane-mcp`](packages/truepane-mcp). To run it
 from a repo checkout instead (for development), point the client's command at

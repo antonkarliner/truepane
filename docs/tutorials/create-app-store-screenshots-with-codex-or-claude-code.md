@@ -34,7 +34,7 @@ Codex shares MCP configuration between its CLI, desktop app, and IDE extension. 
 For Claude Code, run:
 
 ```sh
-claude mcp add truepane -- npx -y truepane-mcp
+claude mcp add --scope user truepane -- npx -y truepane-mcp
 ```
 
 You do not need to clone Truepane or create an environment file. `npx` downloads and starts the published `truepane-mcp` package as a local stdio server.

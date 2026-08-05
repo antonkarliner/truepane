@@ -136,7 +136,7 @@ function CreateWithAgentsGuide() {
       <p>For Codex:</p>
       <Code>{`codex mcp add truepane -- npx -y truepane-mcp`}</Code>
       <p>For Claude Code:</p>
-      <Code>{`claude mcp add truepane -- npx -y truepane-mcp`}</Code>
+      <Code>{`claude mcp add --scope user truepane -- npx -y truepane-mcp`}</Code>
       <p>
         Restart the client and confirm that the Truepane tools are available. The server
         runs locally and does not require a Truepane account or API key.
