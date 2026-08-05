@@ -428,6 +428,7 @@ export function registerTools(server: McpServer): void {
     "list_options",
     {
       title: "List capabilities and style options",
+      annotations: { readOnlyHint: true },
       description:
         "Start here. Lists Truepane's complete agent workflow and every valid platform, output, font, " +
         "background, and composition option, including bulk import, multi-target sets, linked devices, " +
@@ -528,6 +529,7 @@ export function registerTools(server: McpServer): void {
     "create_project",
     {
       title: "Create a screenshot project",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         `Create a named in-memory project from slide texts and local screenshot files. Platforms: ${platformList}. ` +
         "Screenshots are read from absolute local paths (PNG/JPEG/WebP), ideally raw device/simulator captures " +
@@ -583,6 +585,7 @@ export function registerTools(server: McpServer): void {
     "set_slides",
     {
       title: "Replace slide texts",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Replace the project's slide list (full-array replace — send ALL slides in final order). Each slide keeps " +
         "its existing screenshot by position unless a screenshot_path is given for it; use set_screenshots to change " +
@@ -641,6 +644,7 @@ export function registerTools(server: McpServer): void {
     "set_screenshots",
     {
       title: "Attach screenshots to slides",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Attach or replace screenshots on existing slides by 0-based index, from absolute local file paths " +
         "(PNG/JPEG/WebP). Images are scaled to fill the device screen and center-cropped; aspect mismatches are " +
@@ -708,6 +712,7 @@ export function registerTools(server: McpServer): void {
     "import_screenshots",
     {
       title: "Preview or apply a screenshot folder",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Deterministically map a local screenshot directory to target/locale/slide slots. " +
         "Defaults to a read-only dry run. Files named target/locale/NN-name.png map explicitly; " +
@@ -789,6 +794,7 @@ export function registerTools(server: McpServer): void {
     "set_background_image",
     {
       title: "Set or clear the background image",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Put a custom image behind the slides. The image is read from an absolute local path, downscaled " +
         "and re-encoded server-side, so an agent cannot write an oversized payload. " +
@@ -891,6 +897,7 @@ export function registerTools(server: McpServer): void {
     "span_device_across_slides",
     {
       title: "Span a device across two slides",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Place one identical device across the boundary between an adjacent slide pair. " +
         "The left slide exports the left half and the next slide exports the right half; their text and backgrounds remain independent.",
@@ -922,6 +929,7 @@ export function registerTools(server: McpServer): void {
     "set_style",
     {
       title: "Set typography, colors, background",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Patch project style. Without slide_index, patches global settings: fontFamily (see list_options), " +
         "titleColor/subheadColor (CSS colors), titleScale/subtitleScale (multipliers, ~0.5-1.5), " +
@@ -1042,6 +1050,7 @@ export function registerTools(server: McpServer): void {
     "apply_brand_kit",
     {
       title: "Apply a brand kit file",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Apply typography, text colors, background, and default composition from a local .truepane-brand.json file. " +
         "Targets, slides, screenshots, translations, and release data are preserved. Per-slide overrides are preserved by default.",
@@ -1071,6 +1080,7 @@ export function registerTools(server: McpServer): void {
     "export_brand_kit",
     {
       title: "Export a brand kit file",
+      annotations: { readOnlyHint: false, destructiveHint: true },
       description:
         "Write this project's current typography, colors, background, custom font, and default composition to a portable brand kit file.",
       inputSchema: {
@@ -1093,6 +1103,7 @@ export function registerTools(server: McpServer): void {
     "set_output",
     {
       title: "Set output canvas",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Choose a native store screenshot, the 1024x500 Google Play feature graphic, or bounded custom dimensions. " +
         "The device frame remains procedural and is never stretched.",
@@ -1140,6 +1151,7 @@ export function registerTools(server: McpServer): void {
     "validate_project",
     {
       title: "Run release preflight",
+      annotations: { readOnlyHint: true },
       description:
         "Return the same ordered release-preflight issues shown by the web editor. Validation is advisory; " +
         "stable issue codes are suitable for automation.",
@@ -1164,6 +1176,7 @@ export function registerTools(server: McpServer): void {
     "compare_release",
     {
       title: "Compare with release baseline",
+      annotations: { readOnlyHint: true },
       description:
         "Compare deterministic slide/output/locale signatures with the explicit saved release baseline. " +
         "Returns added, changed, unchanged, and removed assets without rendering PNGs or changing the baseline.",
@@ -1187,6 +1200,7 @@ export function registerTools(server: McpServer): void {
     "set_release_baseline",
     {
       title: "Set release baseline",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Explicitly replace the project's release baseline with deterministic signatures for the current assets. " +
         "Previewing, importing, validating, and rendering never call this automatically.",
@@ -1203,6 +1217,7 @@ export function registerTools(server: McpServer): void {
     "render",
     {
       title: "Render PNGs to disk",
+      annotations: { readOnlyHint: false, destructiveHint: true },
       description:
         "Render the project to PNG files at full store resolution (e.g. ios = 1320x2868) and return the absolute " +
         "output paths plus a small inline preview image of the first slide (or the strip) so you can inspect the " +
@@ -1372,6 +1387,7 @@ export function registerTools(server: McpServer): void {
     "export_project",
     {
       title: "Save project JSON",
+      annotations: { readOnlyHint: false, destructiveHint: true },
       description:
         "Write the project as JSON to an absolute path. The file is the exact format the Truepane web app's " +
         "Import Project accepts (screenshots embedded as data URLs), so a human can open and fine-tune it later.",
@@ -1393,6 +1409,7 @@ export function registerTools(server: McpServer): void {
     "load_project",
     {
       title: "Load project JSON",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Load a Truepane project JSON file (from export_project or the web app's Export Project) into memory as a " +
         "new project. Returns the project id and a summary. Screenshots embedded in the file are restored.",
@@ -1412,6 +1429,7 @@ export function registerTools(server: McpServer): void {
     "suggest_palette_from_screenshot",
     {
       title: "Extract a palette from a screenshot",
+      annotations: { readOnlyHint: true },
       description:
         "Extract a color palette from a screenshot: the dominant vivid color as the shape/accent color plus a " +
         "soft near-white tint of it as the background color (same algorithm as the web app's palette button). " +
@@ -1457,6 +1475,7 @@ export function registerTools(server: McpServer): void {
     "set_translations",
     {
       title: "Store slide translations",
+      annotations: { readOnlyHint: false, destructiveHint: false },
       description:
         "Store per-language translations of the slide texts. You are a language model: translate the slide " +
         "titles/subheads YOURSELF — preserve the marketing tone and keep lengths similar to the source (titles " +
