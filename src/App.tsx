@@ -206,7 +206,7 @@ function useMobile() {
 // ---------------------------------------------------------------------------
 // Main App
 // ---------------------------------------------------------------------------
-export function App() {
+export function App({ onExitEditor }: { onExitEditor: () => void }) {
   const isMobile = useMobile();
   const stripRef = useRef<HTMLDivElement>(null);
   const revealAddedSlide = useRef(false);
@@ -248,6 +248,8 @@ export function App() {
   const [releaseBusy, setReleaseBusy] = useState(false);
   const [storageMode, setStorageMode] = useState<StorageMode>("indexeddb");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<"saved" | "saving">("saved");
+  const firstPersist = useRef(true);
   const [evictionNotice, setEvictionNotice] = useState(
     () => storageMayBeEvicted() && !evictionNoticeDismissed(),
   );
@@ -288,9 +290,13 @@ export function App() {
   const pendingSave = useRef<{ state: AppState; brandKits: BrandKit[] } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const flushSave = useCallback(async () => {
-    const pending = pendingSave.current;
-    if (!pending) return;
+  /** Writes any pending snapshot. Returns false if the write failed, so a
+   * caller about to navigate away can stay put and let the error banner show. */
+  const flushSave = useCallback(async (
+    snapshot?: { state: AppState; brandKits: BrandKit[] },
+  ): Promise<boolean> => {
+    const pending = snapshot ?? pendingSave.current;
+    if (!pending) return true;
     pendingSave.current = null;
     if (saveTimer.current) {
       clearTimeout(saveTimer.current);
@@ -299,13 +305,23 @@ export function App() {
     try {
       await saveProject(pending.state, pending.brandKits, storageMode);
       setSaveError(null);
+      setSaveState("saved");
+      return true;
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : String(e));
+      return false;
     }
   }, [storageMode]);
 
   useEffect(() => {
     if (!hydrated) return;
+    // The first run is hydration settling, not an edit — showing "Saving…"
+    // for it would make a freshly loaded project look dirty.
+    if (firstPersist.current) {
+      firstPersist.current = false;
+    } else {
+      setSaveState("saving");
+    }
     pendingSave.current = { state, brandKits };
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => void flushSave(), SAVE_DEBOUNCE_MS);
@@ -327,6 +343,17 @@ export function App() {
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [flushSave]);
+
+  // Leaving the editor unmounts it, and the persist effect's cleanup only
+  // clears the debounce timer — so the write has to happen here or an edit made
+  // within the debounce window is lost. On failure we stay: `saveError` is set,
+  // and the banner explains why the click appeared to do nothing.
+  // The snapshot is passed explicitly rather than read from `pendingSave`:
+  // that ref is populated by an effect, which has not necessarily run for the
+  // edit the user made immediately before clicking.
+  const leaveEditor = useCallback(async () => {
+    if (await flushSave({ state, brandKits })) onExitEditor();
+  }, [flushSave, onExitEditor, state, brandKits]);
 
   // Ask the browser to exempt this origin from eviction once there is real work
   // to protect. Best effort: some browsers require engagement and may refuse.
@@ -1076,6 +1103,8 @@ export function App() {
         requestEyedrop={requestEyedrop}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onExitEditor={leaveEditor}
+        saveState={saveError ? "error" : saveState}
         canUndo={canUndo}
         canRedo={canRedo}
         onUndo={undo}
@@ -1134,6 +1163,7 @@ export function App() {
         requestEyedrop={requestEyedrop}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onExitEditor={leaveEditor}
         arranging={arranging}
         onToggleArrange={() => setArranging((value) => !value)}
         onSpanDevice={() => spanDeviceWithNext(selectedIndex)}
@@ -1171,6 +1201,11 @@ export function App() {
                 {platformDim.storeLabel} · {platformDim.W} × {platformDim.H}
               </span>
               <span className="muted stage__drag-hint">· Drag canvas to navigate</span>
+              {!saveError && (
+                <span className="muted save-status" role="status">
+                  · {saveState === "saving" ? "Saving…" : "Saved on this device"}
+                </span>
+              )}
               {eyedropTarget && (
                 <span className="muted">· Click a slide to pick a color (Esc to cancel)</span>
               )}

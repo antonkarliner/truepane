@@ -66,6 +66,7 @@ interface SidebarProps {
   requestEyedrop: (apply: (hex: string) => void) => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
+  onExitEditor: () => void;
   arranging: boolean;
   onToggleArrange: () => void;
   onSpanDevice: () => void;
@@ -113,6 +114,7 @@ export function Sidebar(props: SidebarProps) {
     requestEyedrop,
     theme,
     onToggleTheme,
+    onExitEditor,
     arranging,
     onToggleArrange,
     onSpanDevice,
@@ -404,7 +406,18 @@ export function Sidebar(props: SidebarProps) {
     <aside className="sidebar" aria-hidden={collapsed}>
       <header className="sidebar__head">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div className="brand">
+          <a
+            className="brand brand--link"
+            href="/"
+            aria-label="Truepane home"
+            title="Back to Truepane home"
+            onClick={(e) => {
+              // Let the browser handle new-tab/new-window clicks itself.
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+              e.preventDefault();
+              onExitEditor();
+            }}
+          >
             <div className="brand__mark">
               <svg viewBox="0 0 32 32" width="14" height="14" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <defs>
@@ -422,7 +435,7 @@ export function Sidebar(props: SidebarProps) {
               </svg>
             </div>
             <div className="brand__name">Truepane</div>
-          </div>
+          </a>
           <button
             className="theme-toggle"
             onClick={onToggleTheme}

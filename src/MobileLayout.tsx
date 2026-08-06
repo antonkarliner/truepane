@@ -46,6 +46,8 @@ export interface MobileLayoutProps {
   requestEyedrop: (apply: (hex: string) => void) => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
+  onExitEditor: () => void;
+  saveState: "saved" | "saving" | "error";
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -77,7 +79,7 @@ export function MobileLayout(props: MobileLayoutProps) {
     selected, updateSlide, deleteSelected, moveSelected,
     addSlide,
     exportPng, exportStrip, exportZip, exportJson, importJson, exporting,
-    requestEyedrop, theme, onToggleTheme,
+    requestEyedrop, theme, onToggleTheme, onExitEditor, saveState,
     canUndo, canRedo, onUndo, onRedo,
     eyedropTarget, pickColorFromSlide,
     arranging, onToggleArrange,
@@ -300,7 +302,17 @@ export function MobileLayout(props: MobileLayoutProps) {
 
       {/* ── Header ── */}
       <header className="mobile-header">
-        <div className="brand">
+        <a
+          className="brand brand--link"
+          href="/"
+          aria-label="Truepane home"
+          onClick={(e) => {
+            // Let the browser handle new-tab/new-window clicks itself.
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            onExitEditor();
+          }}
+        >
           <div className="brand__mark">
             <svg viewBox="0 0 32 32" width="14" height="14" fill="none" xmlns="http://www.w3.org/2000/svg">
               <defs>
@@ -318,7 +330,12 @@ export function MobileLayout(props: MobileLayoutProps) {
             </svg>
           </div>
           <div className="brand__name">Truepane</div>
-        </div>
+        </a>
+        {saveState !== "error" && (
+          <span className="muted save-status" role="status">
+            {saveState === "saving" ? "Saving…" : "Saved"}
+          </span>
+        )}
         <span className="badge mobile-header__badge">{selectedIndex + 1} / {totalSlides}</span>
         <div className="history-controls" role="group" aria-label="Edit history">
           <button

@@ -71,7 +71,14 @@ function RootExperience() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  if (route === "/editor") return <App />;
+  if (route === "/editor") {
+    // A full navigation, not a client-side route change. `loadProject` memoizes
+    // per page session (so the localStorage migration runs exactly once), which
+    // means a remounted <App/> would restore the state as of the *original*
+    // page load and then persist that stale snapshot over newer edits. App
+    // flushes the pending save before calling this.
+    return <App onExitEditor={() => window.location.assign("/")} />;
+  }
   if (route.startsWith("/guides/")) {
     return <GuidePage slug={route.slice("/guides/".length) as GuideSlug} />;
   }
