@@ -191,6 +191,219 @@ function CreateWithAgentsGuide() {
   );
 }
 
+function MaestroTruepaneGuide() {
+  return (
+    <>
+      <p className="guide-eyebrow">Guide · Maestro + Truepane</p>
+      <h1>Automate App Store screenshots with Maestro and Truepane—and save AI tokens</h1>
+      <p className="guide-lead">
+        Let Maestro repeat the taps, locale changes, assertions, and raw captures. Then
+        use Truepane to compose, validate, and render the store-ready slides. The split
+        turns a repetitive visual-agent job into a deterministic command, keeping AI
+        tokens for the review and design decisions that actually need them. The workflow
+        works with native iOS and Android apps, React Native, Flutter, and other mobile
+        stacks Maestro can drive through the platform accessibility layer.
+      </p>
+
+      <h2>Why screenshot capture can consume so many agent tokens</h2>
+      <p>
+        A visual agent can open a simulator, inspect a screen, choose a control, tap it,
+        inspect again, and take a screenshot. That works for a small set. It becomes
+        expensive when the same route must be repeated for every screen and language:
+        each visual observation and navigation decision adds more context to the run.
+      </p>
+      <p>
+        Maestro moves that repetition into a human-readable YAML Flow. It drives the app
+        through the UI and accessibility layer, can assert that the destination is visible,
+        and writes the current screen to a PNG with <code>takeScreenshot</code>. Truepane
+        starts where capture ends: it places those original PNGs inside device frames,
+        applies localized store copy and a reusable design, runs preflight, and renders
+        the final assets locally.
+      </p>
+
+      <ComparisonTable
+        headers={["Stage", "Best tool", "Why"]}
+        rows={[
+          ["Open app screens", "Maestro", "Repeatable UI navigation and assertions"],
+          ["Capture each locale", "Maestro", "Deterministic YAML and stable PNG paths"],
+          ["Approve raw UI", "Human + agent", "Visual judgment still matters"],
+          ["Compose store slides", "Truepane", "Editable frames, copy, backgrounds, and layout"],
+          ["Validate and render", "Truepane", "Local preflight and store-size exports"],
+        ]}
+      />
+
+      <h2>A Flutter case study, not a Flutter-only workflow</h2>
+      <p>
+        The first verified pilot came from Timer.Coffee, a Flutter app. It captured three
+        screens on an iPhone Simulator in English, French, and Arabic: nine raw captures
+        from one command. The existing production set is larger—seven screens in 22
+        locales, or 154 numbered captures. The pilot proves the three-by-three route; the
+        full matrix has not yet been automated, so it should not be presented as completed
+        work.
+      </p>
+      <p>
+        Nothing in the capture-to-composition handoff depends on Flutter. Maestro supports
+        native Swift, Objective-C, Kotlin, and Java apps as well as React Native, Flutter,
+        and other hybrid stacks. The framework-specific part is how your app exposes stable
+        accessibility identifiers; the YAML Flow, PNG folder contract, visual QA, and
+        Truepane handoff stay the same.
+      </p>
+      <p>
+        That distinction matters for token claims too. The workflow clearly removes
+        repeated agent-driven navigation from the capture loop, but there is no measured
+        percentage saving yet. Benchmark one complete release before publishing a number:
+        record elapsed time, failed captures, and agent token usage for both the old
+        visual-agent workflow and the Maestro workflow.
+      </p>
+
+      <h2>1. Prepare a stable test device</h2>
+      <p>
+        Build and install the app, then select an explicit iOS Simulator, Android emulator,
+        or supported physical Android device. Populate it with representative demo data and
+        keep that fixture between languages. Reinstalling a build can preserve app data;
+        erasing the device, uninstalling the app, or clearing state may remove the content
+        your store story depends on.
+      </p>
+      <p>
+        Before automation, dismiss unexpected permission prompts and confirm that every
+        target screen is reachable. A green flow cannot make unstable source data look
+        intentional.
+      </p>
+
+      <h2>2. Give Maestro stable selectors</h2>
+      <p>
+        For localized apps, avoid navigating by translated visible text when a permanent
+        accessibility identifier is available. Maestro's <code>id</code> selector maps to
+        the identifier exposed by each platform or framework, so the Flow can stay readable
+        even when the UI language changes.
+      </p>
+      <ComparisonTable
+        headers={["App stack", "Stable selector source"]}
+        rows={[
+          ["UIKit or SwiftUI", "iOS accessibilityIdentifier"],
+          ["Android Views", "Resource ID or content description"],
+          ["Jetpack Compose", "Semantics test tag exposed as a resource ID"],
+          ["React Native", "testID or accessible text"],
+          ["Flutter", "Semantics identifier or semantic label—not a Flutter Key"],
+        ]}
+      />
+      <Code>{`appId: \${APP_ID}
+---
+- launchApp
+- tapOn:
+    id: "settings"
+- tapOn:
+    id: "localeFrenchListTile"
+- tapOn:
+    id: "recipeListItem_107"
+- assertVisible:
+    id: "recipeDetailNextButton"
+- takeScreenshot:
+    path: "fr-FR/slide-01"`}</Code>
+      <p>
+        Put an <code>assertVisible</code> immediately before each capture. It turns a wrong
+        screen into a loud failure instead of a plausible-looking PNG that reaches design
+        review. Use coordinates only when the accessibility tree cannot expose the control,
+        and validate the destination after the tap. If iOS and Android use different app
+        IDs, inject <code>APP_ID</code> as an environment variable rather than duplicating
+        the entire Flow.
+      </p>
+
+      <h2>3. Run the locale matrix as a command</h2>
+      <p>
+        Keep the mapping between store locales and app locales explicit—for example,
+        <code>fr-FR</code> to <code>fr</code>. A small runner can select the target device,
+        normalize the status bar where the platform allows it, execute the same Flow for
+        each locale, copy successful captures into predictable folders, retain diagnostics
+        for failed runs, and exit non-zero when an expected file is missing.
+      </p>
+      <Code>{`raw-captures/
+  en-US/
+    slide-01.png
+    slide-02.png
+    slide-03.png
+  fr-FR/
+    slide-01.png
+    slide-02.png
+    slide-03.png
+  ar-SA/
+    slide-01.png
+    slide-02.png
+    slide-03.png`}</Code>
+
+      <h2>4. Review the raw captures before Truepane</h2>
+      <p>
+        Automation proves that commands ran; it does not approve the pixels. Build a
+        contact sheet and check the language, screen, data, status bar, screenshot order,
+        text overflow, loading states, keyboards, dialogs, and right-to-left layout. Feed
+        the original full-resolution PNGs to Truepane, not the reduced contact sheet.
+      </p>
+
+      <h2>5. Replace captures and render in Truepane</h2>
+      <p>
+        Start from the previous approved <code>.truepane.json</code> project. Replace each
+        slide image with the matching locale capture while preserving the approved frame,
+        background, typography, localized headline, sizing, and order unless the release
+        includes a deliberate redesign. Then run preflight, render individual slides and
+        full-locale preview strips, review every locale, and save the updated portable
+        project beside the output.
+      </p>
+      <p>
+        With <code>truepane-mcp</code>, an AI agent can perform those structured project
+        updates without repeatedly operating a visual editor. Open the same project in the
+        <a href="/editor"> Truepane browser editor</a> whenever a human needs to adjust
+        composition by eye.
+      </p>
+
+      <h2>Where the token savings come from</h2>
+      <ComparisonTable
+        headers={["Work", "Visual-agent loop", "Maestro + Truepane"]}
+        rows={[
+          ["Navigation", "Observe, decide, tap, observe again for every run", "Execute a reviewed YAML Flow"],
+          ["Locale repetition", "Repeat the visual conversation per language", "Loop over an explicit locale map"],
+          ["File mapping", "Infer captures from the current session", "Use stable locale and slide paths"],
+          ["Failure detection", "Agent notices an unexpected screen", "Assertions and missing-file checks fail loudly"],
+          ["Composition", "Repeated browser manipulation", "Structured Truepane project edits and local rendering"],
+          ["Judgment", "Mixed with routine control work", "Reserved for QA, copy, and design choices"],
+        ]}
+      />
+      <p>
+        The saving is not “no AI.” The agent still helps design the flow, diagnoses failures,
+        reviews contact sheets, updates the Truepane project, and flags visual problems. The
+        saving comes from running deterministic code for deterministic work instead of asking
+        the model to rediscover the same path hundreds of times.
+      </p>
+
+      <h2>Measure your own token reduction</h2>
+      <ol>
+        <li>Choose one representative release matrix and keep its fixture unchanged.</li>
+        <li>Record tokens, elapsed time, retries, and unusable captures with visual-agent navigation.</li>
+        <li>Run the same matrix through Maestro, visual QA, and Truepane.</li>
+        <li>Compare complete workflows, including setup, debugging, and review—not capture alone.</li>
+        <li>Publish the percentage only after the result repeats on a later release.</li>
+      </ol>
+
+      <h2>Maestro and Truepane answer different questions</h2>
+      <p>
+        Maestro asks: “Can we reach the right app state and capture it reliably?” Truepane
+        asks: “Can we turn those captures into a consistent, localized, store-ready visual
+        set?” Keeping that boundary clear makes both tools easier to replace, inspect, and
+        debug—and keeps App Store delivery behind a separate human approval step.
+      </p>
+
+      <aside>
+        <strong>Sources:</strong> This guide is based on the Timer.Coffee screenshot pilot
+        and the official Maestro documentation for <a href="https://docs.maestro.dev/getting-started/build-and-install-your-app">supported platforms</a>,
+        <a href="https://docs.maestro.dev/reference/selectors/core-selectors"> cross-platform selectors</a>,
+        <a href="https://docs.maestro.dev/get-started/supported-platform/flutter"> Flutter Semantics</a>, and
+        <a href="https://docs.maestro.dev/reference/commands-available/takescreenshot"> screenshot capture</a>.
+        Maestro’s commands and installation details can change, so check the current docs
+        before adapting the example Flow.
+      </aside>
+    </>
+  );
+}
+
 function LocalizedGuide() {
   return (
     <>
@@ -982,6 +1195,11 @@ export const GUIDE_REGISTRY = {
     title: "Create App Store screenshots with Codex or Claude Code · Truepane",
     description: "Launch the app, capture simulator states, compose with Truepane, and export native PNGs.",
     component: CreateWithAgentsGuide,
+  },
+  "automate-app-store-screenshots-maestro-truepane-save-ai-tokens": {
+    title: "Automate App Store screenshots with Maestro and Truepane · Truepane",
+    description: "Use Maestro for repeatable localized app captures and Truepane for store-ready composition while reducing AI-agent token usage.",
+    component: MaestroTruepaneGuide,
   },
   "update-localized-app-store-screenshots-without-uploading": {
     title: "Update localized App Store screenshots locally · Truepane",
