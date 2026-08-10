@@ -6,7 +6,8 @@
   "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run generate:og-images && tsc -b && vite build",
+    "generate:og-images": "tsx scripts/generate-guide-og-images.ts",
     "preview": "npm run build && wrangler dev",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",

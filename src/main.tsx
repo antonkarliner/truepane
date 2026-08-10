@@ -32,6 +32,11 @@ function applyRouteToDocument(route: Route): void {
       ? "Compose and export App Store and Google Play screenshot sets locally in the Truepane editor."
       : "Create App Store and Google Play screenshots in your browser with device frames, your own background images or generated ones, local canvas rendering, and PNG, strip, or ZIP export.",
   };
+  const guideSlug = route.startsWith("/guides/") ? route.slice("/guides/".length) : null;
+  const socialImage = new URL(guideSlug ? `/og/guides/${guideSlug}.png` : "/og-image.png", window.location.origin).href;
+  const socialImageAlt = guide
+    ? `${guide.title.replace(/ · Truepane$/, "")} — Truepane guide`
+    : "Truepane editor composing a store screenshot set";
 
   document.title = metadata.title;
 
@@ -50,6 +55,26 @@ function applyRouteToDocument(route: Route): void {
     document.head.append(description);
   }
   description.content = metadata.description;
+
+  const socialMetadata = [
+    ['meta[property="og:title"]', "property", "og:title", metadata.title],
+    ['meta[property="og:description"]', "property", "og:description", metadata.description],
+    ['meta[property="og:image"]', "property", "og:image", socialImage],
+    ['meta[property="og:image:alt"]', "property", "og:image:alt", socialImageAlt],
+    ['meta[name="twitter:title"]', "name", "twitter:title", metadata.title],
+    ['meta[name="twitter:description"]', "name", "twitter:description", metadata.description],
+    ['meta[name="twitter:image"]', "name", "twitter:image", socialImage],
+    ['meta[name="twitter:image:alt"]', "name", "twitter:image:alt", socialImageAlt],
+  ] as const;
+  for (const [selector, attribute, name, content] of socialMetadata) {
+    let meta = document.querySelector<HTMLMetaElement>(selector);
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute(attribute, name);
+      document.head.append(meta);
+    }
+    meta.content = content;
+  }
 }
 
 initialTheme();

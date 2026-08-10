@@ -97,6 +97,8 @@ function prerenderGuide(indexHtml: string, slug: GuideSlug, siteUrl: string): st
   const guide = GUIDE_REGISTRY[slug];
   const route = `/guides/${slug}`;
   const canonical = `${siteUrl}${route}`;
+  const socialImage = `${siteUrl}/og/guides/${slug}.png`;
+  const socialImageAlt = `${guide.title.replace(/ · Truepane$/, "")} — Truepane guide`;
   const article = renderToStaticMarkup(createElement(GuidePage, { slug }));
 
   return indexHtml
@@ -104,6 +106,38 @@ function prerenderGuide(indexHtml: string, slug: GuideSlug, siteUrl: string): st
     .replace(
       /<meta name="description" content="[^"]*" \/>/,
       `<meta name="description" content="${escapeHtml(guide.description)}" />`,
+    )
+    .replace(
+      /<meta property="og:title" content="[^"]*" \/>/,
+      `<meta property="og:title" content="${escapeHtml(guide.title)}" />`,
+    )
+    .replace(
+      /<meta property="og:description" content="[^"]*" \/>/,
+      `<meta property="og:description" content="${escapeHtml(guide.description)}" />`,
+    )
+    .replace(
+      /<meta property="og:image" content="[^"]*" \/>/,
+      `<meta property="og:image" content="${escapeHtml(socialImage)}" />`,
+    )
+    .replace(
+      /<meta property="og:image:alt" content="[^"]*" \/>/,
+      `<meta property="og:image:alt" content="${escapeHtml(socialImageAlt)}" />`,
+    )
+    .replace(
+      /<meta name="twitter:title" content="[^"]*" \/>/,
+      `<meta name="twitter:title" content="${escapeHtml(guide.title)}" />`,
+    )
+    .replace(
+      /<meta name="twitter:description" content="[^"]*" \/>/,
+      `<meta name="twitter:description" content="${escapeHtml(guide.description)}" />`,
+    )
+    .replace(
+      /<meta name="twitter:image" content="[^"]*" \/>/,
+      `<meta name="twitter:image" content="${escapeHtml(socialImage)}" />`,
+    )
+    .replace(
+      /<meta name="twitter:image:alt" content="[^"]*" \/>/,
+      `<meta name="twitter:image:alt" content="${escapeHtml(socialImageAlt)}" />`,
     )
     .replace(
       /<link rel="canonical" href="[^"]*" \/>/,
