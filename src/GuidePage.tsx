@@ -197,12 +197,13 @@ function MaestroTruepaneGuide() {
       <p className="guide-eyebrow">Guide · Maestro + Truepane</p>
       <h1>Automate App Store screenshots with Maestro and Truepane—and save AI tokens</h1>
       <p className="guide-lead">
-        Let Maestro repeat the taps, locale changes, assertions, and raw captures. Then
-        use Truepane to compose, validate, and render the store-ready slides. The split
-        turns a repetitive visual-agent job into a deterministic command, keeping AI
-        tokens for the review and design decisions that actually need them. The workflow
-        works with native iOS and Android apps, React Native, Flutter, and other mobile
-        stacks Maestro can drive through the platform accessibility layer.
+        Let <a href="https://maestro.dev/" target="_blank" rel="noopener noreferrer">Maestro</a> repeat the taps, locale changes,
+        assertions, and raw captures. Then use Truepane to compose, validate, and render
+        the store-ready slides. The split turns a repetitive visual-agent job into a
+        deterministic command, keeping AI tokens for the review and design decisions that
+        actually need them. The workflow works with native iOS and Android apps, React
+        Native, Flutter, and other mobile stacks Maestro can drive through the platform
+        accessibility layer.
       </p>
 
       <h2>Why screenshot capture can consume so many agent tokens</h2>
@@ -232,28 +233,28 @@ function MaestroTruepaneGuide() {
         ]}
       />
 
-      <h2>A Flutter case study, not a Flutter-only workflow</h2>
+      <h2>One complete workflow used 64.9% fewer cache-adjusted agent tokens</h2>
       <p>
-        The first verified pilot came from Timer.Coffee, a Flutter app. It captured three
-        screens on an iPhone Simulator in English, French, and Arabic: nine raw captures
-        from one command. The existing production set is larger—seven screens in 22
-        locales, or 154 numbered captures. The pilot proves the three-by-three route; the
-        full matrix has not yet been automated, so it should not be presented as completed
-        work.
+        In a verified repeat-release benchmark, the same three screens were captured in
+        English, French, and Arabic with visual-agent navigation and with Maestro. Both
+        legs included all nine raw captures, contact-sheet QA, Truepane project updates,
+        preflight, rendering, and review of the three localized strips.
       </p>
+      <ComparisonTable
+        headers={["Metric", "Visual agent", "Maestro + QA", "Reduction"]}
+        rows={[
+          ["Cache-adjusted agent tokens", "86,304", "30,260", "64.9%"],
+          ["Elapsed time", "10m 21s", "3m 44s", "63.9%"],
+          ["Tool calls", "53", "22", "58.5%"],
+          ["Usable raw captures", "9 of 9", "9 of 9", "Same output count"],
+        ]}
+      />
       <p>
-        Nothing in the capture-to-composition handoff depends on Flutter. Maestro supports
-        native Swift, Objective-C, Kotlin, and Java apps as well as React Native, Flutter,
-        and other hybrid stacks. The framework-specific part is how your app exposes stable
-        accessibility identifiers; the YAML Flow, PNG folder contract, visual QA, and
-        Truepane handoff stay the same.
-      </p>
-      <p>
-        That distinction matters for token claims too. The workflow clearly removes
-        repeated agent-driven navigation from the capture loop, but there is no measured
-        percentage saving yet. Benchmark one complete release before publishing a number:
-        record elapsed time, failed captures, and agent token usage for both the old
-        visual-agent workflow and the Maestro workflow.
+        This was one local 3×3 A/B run, not a universal performance claim. The first-ever
+        Maestro release also included installation, selector work, tests, and debugging.
+        On this small matrix, that one-time setup cost broke even after about seven repeat
+        releases by cache-adjusted tokens or five by elapsed time. Larger or more stable
+        projects will have different results.
       </p>
 
       <h2>1. Prepare a stable test device</h2>
@@ -263,6 +264,10 @@ function MaestroTruepaneGuide() {
         keep that fixture between languages. Reinstalling a build can preserve app data;
         erasing the device, uninstalling the app, or clearing state may remove the content
         your store story depends on.
+      </p>
+      <p>
+        If Maestro is not installed yet, follow its <a href="https://docs.maestro.dev/get-started/quickstart" target="_blank" rel="noopener noreferrer">official quickstart</a>{" "}
+        to connect a test device and run a first YAML Flow before adding the screenshot matrix.
       </p>
       <p>
         Before automation, dismiss unexpected permission prompts and confirm that every
@@ -354,6 +359,11 @@ function MaestroTruepaneGuide() {
         <a href="/editor"> Truepane browser editor</a> whenever a human needs to adjust
         composition by eye.
       </p>
+      <p>
+        For the complete agent setup—from installing <code>truepane-mcp</code> through the
+        first local render—continue with <a href="/guides/create-app-store-screenshots-with-codex-or-claude-code">the
+        Codex and Claude Code screenshot guide</a>.
+      </p>
 
       <h2>Where the token savings come from</h2>
       <ComparisonTable
@@ -374,15 +384,6 @@ function MaestroTruepaneGuide() {
         the model to rediscover the same path hundreds of times.
       </p>
 
-      <h2>Measure your own token reduction</h2>
-      <ol>
-        <li>Choose one representative release matrix and keep its fixture unchanged.</li>
-        <li>Record tokens, elapsed time, retries, and unusable captures with visual-agent navigation.</li>
-        <li>Run the same matrix through Maestro, visual QA, and Truepane.</li>
-        <li>Compare complete workflows, including setup, debugging, and review—not capture alone.</li>
-        <li>Publish the percentage only after the result repeats on a later release.</li>
-      </ol>
-
       <h2>Maestro and Truepane answer different questions</h2>
       <p>
         Maestro asks: “Can we reach the right app state and capture it reliably?” Truepane
@@ -392,11 +393,11 @@ function MaestroTruepaneGuide() {
       </p>
 
       <aside>
-        <strong>Sources:</strong> This guide is based on the Timer.Coffee screenshot pilot
-        and the official Maestro documentation for <a href="https://docs.maestro.dev/getting-started/build-and-install-your-app">supported platforms</a>,
-        <a href="https://docs.maestro.dev/reference/selectors/core-selectors"> cross-platform selectors</a>,
-        <a href="https://docs.maestro.dev/get-started/supported-platform/flutter"> Flutter Semantics</a>, and
-        <a href="https://docs.maestro.dev/reference/commands-available/takescreenshot"> screenshot capture</a>.
+        <strong>Sources:</strong> Timer.Coffee local A/B benchmark recorded 10 August 2026;
+        official Maestro documentation for <a href="https://docs.maestro.dev/getting-started/build-and-install-your-app" target="_blank" rel="noopener noreferrer">supported platforms</a>,
+        <a href="https://docs.maestro.dev/reference/selectors/core-selectors" target="_blank" rel="noopener noreferrer"> cross-platform selectors</a>,
+        <a href="https://docs.maestro.dev/get-started/supported-platform/flutter" target="_blank" rel="noopener noreferrer"> Flutter Semantics</a>, and
+        <a href="https://docs.maestro.dev/reference/commands-available/takescreenshot" target="_blank" rel="noopener noreferrer"> screenshot capture</a>.
         Maestro’s commands and installation details can change, so check the current docs
         before adapting the example Flow.
       </aside>
@@ -1198,7 +1199,7 @@ export const GUIDE_REGISTRY = {
   },
   "automate-app-store-screenshots-maestro-truepane-save-ai-tokens": {
     title: "Automate App Store screenshots with Maestro and Truepane · Truepane",
-    description: "Use Maestro for repeatable localized app captures and Truepane for store-ready composition while reducing AI-agent token usage.",
+    description: "See how Maestro and Truepane used 64.9% fewer cache-adjusted agent tokens in one complete 3×3 repeat-release benchmark.",
     component: MaestroTruepaneGuide,
   },
   "update-localized-app-store-screenshots-without-uploading": {
