@@ -47,13 +47,16 @@ function accentFor(slug: string): string {
 
 function drawLogo(ctx: SKRSContext2D): void {
   roundedRect(ctx, 64, 52, 52, 52, 12);
-  ctx.fillStyle = "#18141c";
+  ctx.fillStyle = "#f4f1ea";
   ctx.fill();
 
+  const gradient = ctx.createLinearGradient(0, 61, 0, 95);
+  gradient.addColorStop(0, "#e07828");
+  gradient.addColorStop(1, "#8840b8");
   const strips = [
-    { x: 71, y: 65, w: 9, h: 26, color: "#f0e4cc" },
-    { x: 86, y: 61, w: 9, h: 34, color: "#c47c3b" },
-    { x: 101, y: 65, w: 9, h: 26, color: "#7060a8" },
+    { x: 71, y: 65, w: 9, h: 26, color: "#a89070" },
+    { x: 86, y: 61, w: 9, h: 34, color: gradient },
+    { x: 101, y: 65, w: 9, h: 26, color: "#5c4e96" },
   ];
   for (const strip of strips) {
     roundedRect(ctx, strip.x, strip.y, strip.w, strip.h, 3);
@@ -93,10 +96,13 @@ async function generateCard(slug: string, rawTitle: string): Promise<void> {
   const lineHeight = Math.round(titleLayout.size * 1.08);
   titleLayout.lines.forEach((line, index) => ctx.fillText(line, 64, 218 + index * lineHeight));
 
+  const paneGradient = ctx.createLinearGradient(0, 85, 0, 545);
+  paneGradient.addColorStop(0, "#e07828");
+  paneGradient.addColorStop(1, "#8840b8");
   const panes = [
-    { x: 820, y: 150, width: 90, height: 330, color: "#f0e4cc" },
-    { x: 950, y: 85, width: 90, height: 460, color: "#c47c3b" },
-    { x: 1080, y: 150, width: 90, height: 330, color: "#7060a8" },
+    { x: 820, y: 150, width: 90, height: 330, color: "#a89070" },
+    { x: 950, y: 85, width: 90, height: 460, color: paneGradient },
+    { x: 1080, y: 150, width: 90, height: 330, color: "#5c4e96" },
   ];
   ctx.shadowColor = "rgba(26, 22, 18, 0.10)";
   ctx.shadowBlur = 20;
