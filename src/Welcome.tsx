@@ -230,18 +230,6 @@ export function Welcome({ onOpenEditor }: { onOpenEditor: () => void }) {
           </button>
         </section>
 
-        <section className="welcome-strip">
-          <img
-            src="/welcome-strip-continuity.jpg"
-            alt="Seven App Store slides sharing one backdrop that runs unbroken across the set"
-            loading="lazy"
-            decoding="async"
-            width={2400}
-            height={745}
-          />
-          <p>One backdrop, seven slides, exported as one continuous strip.</p>
-        </section>
-
         <footer className="welcome__footer">
           <div className="welcome__footer-item">
             <FileCodeIcon size={28} weight="light" aria-hidden="true" />

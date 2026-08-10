@@ -988,25 +988,6 @@ button { cursor: pointer; font: inherit; }
 .welcome-preview--editor-showcase {
   background: #f6f3ed;
 }
-.welcome-strip {
-  grid-column: 1 / -1;
-  position: relative;
-  z-index: 1;
-  padding: 30px 48px 26px;
-  background: #f9f7f2; /* opaque: hides the column divider behind the band */
-}
-.welcome-strip img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 1px solid rgba(26,22,18,0.14);
-  border-radius: 9px;
-}
-.welcome-strip p {
-  margin: 12px 0 0;
-  color: rgba(26,22,18,0.58);
-  font-size: 13px;
-}
 .welcome__footer {
   grid-column: 1 / -1;
   border-top: 1px solid rgba(26,22,18,0.12);
@@ -1220,8 +1201,6 @@ button { cursor: pointer; font: inherit; }
   .welcome-path--mcp { border-right: 0; border-bottom: 1px solid rgba(26,22,18,0.14); }
   .welcome-path__button,
   .welcome-path__button--primary { max-width: none; }
-  /* the strip is unreadable below ~800px; the editor preview still carries the proof */
-  .welcome-strip { display: none; }
   .welcome__footer { display: none; }
   .setup-backdrop { padding: 12px; align-items: end; }
   .setup-modal { max-height: calc(100dvh - 24px); }
@@ -1777,9 +1756,6 @@ body[data-route="guide"] > .site-footer { display: none; }
   background: #1e1b22;
   color: #f0ece4;
 }
-[data-theme="dark"] .welcome-strip { background: #1e1b22; }
-[data-theme="dark"] .welcome-strip img { border-color: rgba(255,255,255,0.13); }
-[data-theme="dark"] .welcome-strip p { color: rgba(240,236,228,0.58); }
 [data-theme="dark"] .welcome__skip,
 [data-theme="dark"] .welcome__intro > p:not(.welcome__eyebrow),
 [data-theme="dark"] .welcome__intro > span,
