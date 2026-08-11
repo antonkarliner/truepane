@@ -27,7 +27,7 @@
     "url": "git+https://github.com/antonkarliner/truepane.git",
     "directory": "packages/truepane-mcp"
   },
-  "homepage": "https://github.com/antonkarliner/truepane/tree/main/packages/truepane-mcp#readme",
+  "homepage": "https://truepane.dev/",
   "bugs": "https://github.com/antonkarliner/truepane/issues",
   "keywords": [
     "mcp",
