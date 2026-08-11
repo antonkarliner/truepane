@@ -207,7 +207,11 @@ export function Welcome({ onOpenEditor }: { onOpenEditor: () => void }) {
             <span className="welcome-setup-hint__terminal" aria-hidden="true">›_</span>
             <p><strong>One-command setup</strong> for Codex, Claude Code, and other MCP clients.</p>
           </div>
-          <button className="welcome-path__button welcome-path__button--primary" onClick={() => setSetupOpen(true)}>
+          <button
+            className="welcome-path__button welcome-path__button--primary"
+            data-umami-event="mcp-setup-opened"
+            onClick={() => setSetupOpen(true)}
+          >
             Show setup commands <span aria-hidden="true">→</span>
           </button>
         </section>

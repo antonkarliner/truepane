@@ -6,6 +6,26 @@ import { initialTheme } from "./theme";
 import { Welcome } from "./Welcome";
 import "./styles.css";
 
+function initializeSeoCopyButtons(): void {
+  document.querySelectorAll<HTMLButtonElement>(".seo-content__copy").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const command = button.closest(".seo-content__code-wrap")?.querySelector("code")?.textContent;
+      if (!command) return;
+
+      try {
+        await navigator.clipboard.writeText(command);
+        button.textContent = "Copied";
+      } catch {
+        button.textContent = "Copy failed";
+      }
+
+      window.setTimeout(() => {
+        button.textContent = "Copy";
+      }, 1800);
+    });
+  });
+}
+
 type Route = "/" | "/editor" | `/guides/${GuideSlug}`;
 
 function currentRoute(): Route {
@@ -78,6 +98,7 @@ function applyRouteToDocument(route: Route): void {
 }
 
 initialTheme();
+initializeSeoCopyButtons();
 const startingRoute = currentRoute();
 applyRouteToDocument(startingRoute);
 
