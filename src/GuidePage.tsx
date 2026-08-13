@@ -1,4 +1,5 @@
 import * as React from "react";
+import { MoonIcon, SunIcon } from "@phosphor-icons/react";
 
 type GuideEntry = {
   title: string;
@@ -50,13 +51,36 @@ const folderTree = `release-screenshots/
       02-recipe.png
       03-timer.png`;
 
-function GuideHeader() {
+function GuideHeader({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTheme: () => void }) {
   return (
     <header className="guide-header">
-      <a className="guide-header__brand" href="/">Truepane</a>
+      <a className="guide-header__brand" href="/" aria-label="Truepane home">
+        <span className="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="14" height="14" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="guide-brand-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#e07828" />
+                <stop offset="100%" stopColor="#8840b8" />
+              </linearGradient>
+            </defs>
+            <rect x="4" y="8" width="5.5" height="16" rx="1.6" fill="var(--brand-left-fill)" />
+            <rect x="13.25" y="6" width="5.5" height="20" rx="1.6" fill="url(#guide-brand-gradient)" />
+            <rect x="22.5" y="8" width="5.5" height="16" rx="1.6" fill="#7060a8" />
+          </svg>
+        </span>
+        <span>Truepane</span>
+      </a>
       <nav aria-label="Guide navigation">
         <a href="/#guides">All guides</a>
         <a href="/editor">Open editor</a>
+        <button
+          className="theme-toggle"
+          onClick={onToggleTheme}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? <SunIcon size={16} /> : <MoonIcon size={16} />}
+        </button>
       </nav>
     </header>
   );
@@ -1256,12 +1280,20 @@ export const GUIDE_REGISTRY = {
 
 export type GuideSlug = keyof typeof GUIDE_REGISTRY;
 
-export function GuidePage({ slug }: { slug: GuideSlug }) {
+export function GuidePage({
+  slug,
+  theme = "light",
+  onToggleTheme = () => undefined,
+}: {
+  slug: GuideSlug;
+  theme?: "light" | "dark";
+  onToggleTheme?: () => void;
+}) {
   const Guide = GUIDE_REGISTRY[slug].component;
 
   return (
     <div className="guide-page">
-      <GuideHeader />
+      <GuideHeader theme={theme} onToggleTheme={onToggleTheme} />
       <article className="guide-article">
         <Guide />
       </article>

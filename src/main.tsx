@@ -2,7 +2,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./App";
 import { GUIDE_REGISTRY, GuidePage, type GuideSlug } from "./GuidePage";
-import { initialTheme } from "./theme";
+import { applyTheme, initialTheme, type Theme } from "./theme";
 import { Welcome } from "./Welcome";
 import "./styles.css";
 
@@ -126,7 +126,7 @@ function RootExperience() {
     return <App onExitEditor={() => window.location.assign("/")} />;
   }
   if (route.startsWith("/guides/")) {
-    return <GuidePage slug={route.slice("/guides/".length) as GuideSlug} />;
+    return <GuideExperience slug={route.slice("/guides/".length) as GuideSlug} />;
   }
 
   return (
@@ -137,6 +137,20 @@ function RootExperience() {
       }}
     />
   );
+}
+
+function GuideExperience({ slug }: { slug: GuideSlug }) {
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+
+  const toggleTheme = () => {
+    setTheme((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      applyTheme(next);
+      return next;
+    });
+  };
+
+  return <GuidePage slug={slug} theme={theme} onToggleTheme={toggleTheme} />;
 }
 
 const rootEl = document.getElementById("root");

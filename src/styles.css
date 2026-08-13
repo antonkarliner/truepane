@@ -1570,15 +1570,23 @@ body[data-route="guide"] > .site-footer { display: none; }
   border-bottom: 1px solid rgba(26,22,18,0.14);
 }
 .guide-header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   color: inherit;
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.03em;
   text-decoration: none;
 }
+.guide-header__brand .brand__mark {
+  width: 28px;
+  height: 28px;
+}
 .guide-header nav,
 .guide-footer {
   display: flex;
+  align-items: center;
   gap: 24px;
 }
 .guide-header a,
