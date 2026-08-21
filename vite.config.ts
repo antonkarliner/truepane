@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -151,6 +151,28 @@ function prerenderGuide(indexHtml: string, slug: GuideSlug, siteUrl: string): st
     .replace('<div id="root"></div>', `<div id="root">${article}</div>`);
 }
 
+function prerenderEditor(indexHtml: string, siteUrl: string): string {
+  const title = "Truepane editor · App Store screenshot generator";
+  const description = "Compose and export App Store and Google Play screenshot sets locally in the Truepane editor.";
+  const canonical = `${siteUrl}/editor`;
+
+  return indexHtml
+    .replace(/<title>.*?<\/title>/s, `<title>${title}</title>`)
+    .replace(
+      /<meta name="description" content="[^"]*" \/>/,
+      `<meta name="description" content="${description}" />`,
+    )
+    .replace(
+      /<link rel="canonical" href="[^"]*" \/>/,
+      `<link rel="canonical" href="${canonical}" />`,
+    )
+    .replace(
+      /<meta property="og:url" content="[^"]*" \/>/,
+      `<meta property="og:url" content="${canonical}" />`,
+    )
+    .replace("<body>", '<body data-route="editor">');
+}
+
 function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
   return {
     name: "truepane-seo",
@@ -197,11 +219,20 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
     async writeBundle(options) {
       if (!siteUrl || !options.dir) return;
       const indexHtml = await readFile(join(options.dir, "index.html"), "utf8");
+      await writeFile(join(options.dir, "editor.html"), prerenderEditor(indexHtml, siteUrl));
       const guidesDir = join(options.dir, "guides");
       await mkdir(guidesDir, { recursive: true });
       for (const slug of GUIDE_SLUGS) {
         await writeFile(join(guidesDir, `${slug}.html`), prerenderGuide(indexHtml, slug, siteUrl));
       }
+
+      const requiredArtifacts = [
+        "editor.html",
+        "404.html",
+        "llms.txt",
+        ...GUIDE_SLUGS.map((slug) => join("guides", `${slug}.html`)),
+      ];
+      await Promise.all(requiredArtifacts.map((file) => access(join(options.dir!, file))));
     },
   };
 }
