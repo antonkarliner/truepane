@@ -45,6 +45,8 @@ function DevelopersPage() {
       </p>
       <h2>Package and protocol metadata</h2>
       <ul>
+        <li><a href="/.well-known/ai-catalog.json">AI resource catalog</a></li>
+        <li><a href="/.well-known/agent-skills/index.json">Agent Skills discovery index</a></li>
         <li><a href="/mcp/server.json">First-party MCP server metadata</a></li>
         <li><a href="https://registry.npmjs.org/truepane-mcp/latest">Machine-readable npm package metadata</a></li>
         <li><a href="https://www.npmjs.com/package/truepane-mcp">truepane-mcp on npm</a></li>

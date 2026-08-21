@@ -64,3 +64,50 @@ describe("agent-friendly 404 responses", () => {
     expect(response.headers.get("Vary")).toBeNull();
   });
 });
+
+describe("agent discovery", () => {
+  it("advertises the machine-readable entry points from the homepage", async () => {
+    const response = await worker.fetch(
+      new Request("https://truepane.dev/", { headers: { Accept: "text/html" } }),
+      assetEnv(new Response("<h1>Truepane</h1>", {
+        headers: { "Content-Type": "text/html" },
+      })),
+    );
+
+    const link = response.headers.get("Link");
+    expect(link).toContain('</sitemap.xml>; rel="sitemap"');
+    expect(link).toContain('</mcp/server.json>; rel="service-desc"');
+    expect(link).toContain('</.well-known/ai-catalog.json>; rel="ai-catalog"');
+    expect(link).toContain('</.well-known/agent-skills/index.json>; rel="agent-skills"');
+  });
+
+  it("serves the stdio registry metadata from the compatibility well-known path", async () => {
+    let requestedUrl = "";
+    const response = await worker.fetch(
+      new Request("https://truepane.dev/.well-known/mcp"),
+      {
+        ASSETS: {
+          fetch: async (request: Request) => {
+            requestedUrl = request.url;
+            return new Response('{"name":"io.github.antonkarliner/truepane"}');
+          },
+        },
+      },
+    );
+
+    expect(requestedUrl).toBe("https://truepane.dev/mcp/server.json");
+    expect(response.headers.get("Content-Type")).toBe("application/json; charset=utf-8");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+
+  it("adds cross-origin discovery headers to published catalog assets", async () => {
+    const response = await worker.fetch(
+      new Request("https://truepane.dev/.well-known/ai-catalog.json"),
+      assetEnv(new Response('{"specVersion":"1.0","entries":[]}')),
+    );
+
+    expect(response.headers.get("Content-Type")).toBe("application/ai-catalog+json; charset=utf-8");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=3600");
+  });
+});

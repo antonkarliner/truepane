@@ -60,6 +60,8 @@ The MCP server can render native store sizes, a Google Play feature graphic, cus
 - [Truepane documentation](https://raw.githubusercontent.com/antonkarliner/truepane/main/README.md): Current features, architecture, privacy model, local setup, configuration, MCP setup, and licensing.
 - [Truepane MCP reference](https://raw.githubusercontent.com/antonkarliner/truepane/main/packages/truepane-mcp/README.md): Installation, agent workflow, tool map, fonts, and examples.
 - [Truepane MCP server metadata](https://truepane.dev/mcp/server.json): First-party machine-readable package and transport metadata.
+- [Truepane AI resource catalog](https://truepane.dev/.well-known/ai-catalog.json): Discover the MCP server and installable screenshot workflow skill from one typed catalog.
+- [Truepane Agent Skills index](https://truepane.dev/.well-known/agent-skills/index.json): Versioned skill metadata with a digest for integrity verification.
 - [truepane-mcp package metadata](https://registry.npmjs.org/truepane-mcp/latest): Machine-readable npm registry record for the published local stdio MCP server.
 
 ## Guides

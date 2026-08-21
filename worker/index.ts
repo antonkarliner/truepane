@@ -4,7 +4,23 @@ type Env = {
   ASSETS: { fetch(request: Request): Promise<Response> };
 };
 
-const MARKDOWN_ALTERNATE = '</llms.txt>; rel="alternate"; type="text/markdown"';
+const HOMEPAGE_LINKS = [
+  '</llms.txt>; rel="alternate"; type="text/markdown"',
+  '</index.md>; rel="alternate"; type="text/markdown"',
+  '</sitemap.xml>; rel="sitemap"; type="application/xml"',
+  '</developers>; rel="describedby"; type="text/html"',
+  '</mcp/server.json>; rel="service-desc"; type="application/json"',
+  '</.well-known/ai-catalog.json>; rel="ai-catalog"; type="application/ai-catalog+json"',
+  '</.well-known/agent-skills/index.json>; rel="agent-skills"; type="application/json"',
+].join(", ");
+
+const DISCOVERY_CONTENT_TYPES = new Map<string, string>([
+  ["/.well-known/ai-catalog.json", "application/ai-catalog+json; charset=utf-8"],
+  ["/.well-known/agent-skills/index.json", "application/json; charset=utf-8"],
+  ["/.well-known/mcp", "application/json; charset=utf-8"],
+  ["/.well-known/mcp.json", "application/json; charset=utf-8"],
+  ["/index.md", "text/markdown; charset=utf-8"],
+]);
 
 function withVaryAccept(response: Response): Response {
   const headers = new Headers(response.headers);
@@ -25,8 +41,21 @@ function withHomepageHeaders(response: Response, representation: "html" | "markd
     headers.set("Content-Type", "text/markdown; charset=utf-8");
   } else {
     const existingLink = headers.get("Link");
-    headers.set("Link", existingLink ? `${existingLink}, ${MARKDOWN_ALTERNATE}` : MARKDOWN_ALTERNATE);
+    headers.set("Link", existingLink ? `${existingLink}, ${HOMEPAGE_LINKS}` : HOMEPAGE_LINKS);
   }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function withDiscoveryHeaders(response: Response, contentType: string | undefined): Response {
+  const headers = new Headers(response.headers);
+  headers.set("Access-Control-Allow-Origin", "*");
+  headers.set("Cache-Control", "public, max-age=3600");
+  if (contentType) headers.set("Content-Type", contentType);
 
   return new Response(response.body, {
     status: response.status,
@@ -56,7 +85,20 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname !== "/") {
-      const assetResponse = await env.ASSETS.fetch(request);
+      const assetRequest = url.pathname === "/.well-known/mcp"
+        ? new Request(new URL("/mcp/server.json", request.url), {
+            method: request.method,
+            headers: request.headers,
+          })
+        : request;
+      const assetResponse = await env.ASSETS.fetch(assetRequest);
+      const contentType = DISCOVERY_CONTENT_TYPES.get(url.pathname)
+        ?? (url.pathname.startsWith("/.well-known/agent-skills/") && url.pathname.endsWith("/SKILL.md")
+          ? "text/markdown; charset=utf-8"
+          : undefined);
+      if (assetResponse.status !== 404 && contentType) {
+        return withDiscoveryHeaders(assetResponse, contentType);
+      }
       if (assetResponse.status !== 404) return assetResponse;
 
       if (selectRepresentation(request.headers.get("Accept")) === "markdown") {

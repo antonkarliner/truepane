@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { createHash } from "node:crypto";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createElement } from "react";
@@ -13,6 +14,8 @@ const SEO_TITLE = "Truepane - App Store Screenshot Generator for Indie Apps";
 const SEO_DESCRIPTION =
   "Create App Store and Google Play screenshots in your browser with device frames, your own background images or generated ones, local canvas rendering, and PNG, strip, or ZIP export.";
 const DEFAULT_SITE_URL = "https://truepane.dev";
+const AGENT_SKILL_NAME = "truepane-screenshot-workflow";
+const AGENT_SKILL_SOURCE = `skills/${AGENT_SKILL_NAME}/SKILL.md`;
 const GUIDE_SLUGS = Object.keys(GUIDE_REGISTRY) as GuideSlug[];
 const STATIC_PAGE_SLUGS = Object.keys(STATIC_PAGE_REGISTRY) as StaticPageSlug[];
 
@@ -34,6 +37,10 @@ function jsonLd(siteUrl: string | null): string {
     author: { "@type": "Person", name: "Anton Karliner" },
     maintainer: { "@type": "Person", name: "Anton Karliner" },
     codeRepository: "https://github.com/antonkarliner/truepane",
+    sameAs: [
+      "https://github.com/antonkarliner/truepane",
+      "https://www.npmjs.com/package/truepane-mcp",
+    ],
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     featureList: [
       "App Store and Google Play screenshot generation",
@@ -88,6 +95,51 @@ function jsonLd(siteUrl: string | null): string {
     null,
     2,
   ).replace(/</g, "\\u003c");
+}
+
+function aiCatalog(siteUrl: string, version: string): string {
+  return `${JSON.stringify({
+    specVersion: "1.0",
+    host: {
+      displayName: "Truepane",
+      identifier: `${siteUrl}/`,
+    },
+    entries: [
+      {
+        identifier: "urn:air:truepane.dev:mcp:truepane-mcp",
+        displayName: "Truepane MCP",
+        version,
+        type: "application/json",
+        url: `${siteUrl}/mcp/server.json`,
+        description: "Registry metadata for the local Truepane stdio MCP server.",
+        tags: ["mcp", "app-store", "google-play", "screenshots"],
+      },
+      {
+        identifier: `urn:air:truepane.dev:skill:${AGENT_SKILL_NAME}`,
+        displayName: "Truepane screenshot workflow",
+        type: "application/agent-skills+md",
+        url: `${siteUrl}/.well-known/agent-skills/${AGENT_SKILL_NAME}/SKILL.md`,
+        description: "Agent instructions for creating and validating store screenshot sets with Truepane.",
+        tags: ["agent-skill", "app-store", "google-play", "screenshots"],
+      },
+    ],
+  }, null, 2)}\n`;
+}
+
+function agentSkillsIndex(siteUrl: string, skillSource: string): string {
+  const digest = createHash("sha256").update(skillSource).digest("hex");
+  return `${JSON.stringify({
+    $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+    skills: [
+      {
+        name: AGENT_SKILL_NAME,
+        type: "skill-md",
+        description: "Create, localize, validate, and render App Store or Google Play screenshot sets with the local Truepane MCP server.",
+        url: `${siteUrl}/.well-known/agent-skills/${AGENT_SKILL_NAME}/SKILL.md`,
+        digest: `sha256:${digest}`,
+      },
+    ],
+  }, null, 2)}\n`;
 }
 
 function escapeHtml(value: string): string {
@@ -259,6 +311,8 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
             `<meta property="og:image:alt" content="Truepane editor composing a store screenshot set" />`,
             `<meta name="twitter:image" content="${siteUrl}/og-image.png" />`,
             `<meta name="twitter:image:alt" content="Truepane editor composing a store screenshot set" />`,
+            `<link rel="ai-catalog" href="${siteUrl}/.well-known/ai-catalog.json" type="application/ai-catalog+json" />`,
+            `<link rel="agent-skills" href="${siteUrl}/.well-known/agent-skills/index.json" type="application/json" />`,
           ].join("\n")
         : "";
       return html
@@ -270,6 +324,12 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
     },
     generateBundle() {
       if (!siteUrl) return;
+      const lastmod = new Date().toISOString().slice(0, 10);
+      const sitemapUrls = [
+        `${siteUrl}/`,
+        ...STATIC_PAGE_SLUGS.map((slug) => `${siteUrl}/${slug}`),
+        ...GUIDE_SLUGS.map((slug) => `${siteUrl}/guides/${slug}`),
+      ];
       this.emitFile({
         type: "asset",
         fileName: "robots.txt",
@@ -278,7 +338,7 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${siteUrl}/</loc>\n  </url>\n${STATIC_PAGE_SLUGS.map((slug) => `  <url>\n    <loc>${siteUrl}/${slug}</loc>\n  </url>`).join("\n")}\n${GUIDE_SLUGS.map((slug) => `  <url>\n    <loc>${siteUrl}/guides/${slug}</loc>\n  </url>`).join("\n")}\n</urlset>\n`,
+        source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls.map((url) => `  <url>\n    <loc>${url}</loc>\n    <lastmod>${lastmod}</lastmod>\n  </url>`).join("\n")}\n</urlset>\n`,
       });
 
     },
@@ -319,10 +379,33 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
       await mkdir(mcpDir, { recursive: true });
       await writeFile(join(mcpDir, "server.json"), serverSource);
 
+      const skillSource = await readFile(AGENT_SKILL_SOURCE, "utf8");
+      const llmsSource = await readFile(join(options.dir, "llms.txt"), "utf8");
+      const wellKnownDir = join(options.dir, ".well-known");
+      const publishedSkillDir = join(wellKnownDir, "agent-skills", AGENT_SKILL_NAME);
+      await mkdir(publishedSkillDir, { recursive: true });
+      await Promise.all([
+        writeFile(join(wellKnownDir, "ai-catalog.json"), aiCatalog(siteUrl, packageMetadata.version)),
+        writeFile(join(wellKnownDir, "mcp"), serverSource),
+        writeFile(join(wellKnownDir, "mcp.json"), serverSource),
+        writeFile(
+          join(wellKnownDir, "agent-skills", "index.json"),
+          agentSkillsIndex(siteUrl, skillSource),
+        ),
+        writeFile(join(publishedSkillDir, "SKILL.md"), skillSource),
+        writeFile(join(options.dir, "index.md"), llmsSource),
+      ]);
+
       const requiredArtifacts = [
         "editor.html",
         "404.html",
+        "index.md",
         "llms.txt",
+        join(".well-known", "ai-catalog.json"),
+        join(".well-known", "mcp"),
+        join(".well-known", "mcp.json"),
+        join(".well-known", "agent-skills", "index.json"),
+        join(".well-known", "agent-skills", AGENT_SKILL_NAME, "SKILL.md"),
         join("mcp", "server.json"),
         ...STATIC_PAGE_SLUGS.map((slug) => `${slug}.html`),
         ...GUIDE_SLUGS.map((slug) => join("guides", `${slug}.html`)),
