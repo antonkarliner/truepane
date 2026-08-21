@@ -1,24 +1,77 @@
 # Truepane
 
-> Truepane is a free, open-source App Store and Google Play screenshot generator. It runs in the browser, renders locally, and exports store-ready PNGs, strips, and ZIP files.
+> Truepane is a free, open-source App Store and Google Play screenshot-set builder. Use it visually at truepane.dev or through the local `truepane-mcp` server for AI-agent workflows.
 
-Truepane supports iPhone, iPad, Android phone, and Android tablet projects, along with Google Play feature graphics and custom output sizes. Projects can include multiple platforms and locales, reusable brand kits, release baselines, and editable JSON import and export.
+Truepane turns raw simulator, emulator, or device captures into store-ready screenshot sets. It supports iPhone, iPad, Android phone, and Android tablet targets; localized copy and screenshots; exact native store dimensions; the 1024×500 Google Play feature graphic; and bounded custom output sizes.
 
-Screenshot composition happens locally. Screenshots are not uploaded by the web editor. Optional AI helpers process only the text a user explicitly submits. Truepane is licensed under AGPL-3.0.
+Screenshot composition and rendering happen locally. The browser editor does not upload screenshots, and the MCP server reads images from local paths and writes generated assets to local paths. Optional browser AI helpers process only text explicitly submitted by the user. Truepane is licensed under AGPL-3.0.
 
-AI agents can use the local `truepane-mcp` stdio server to create, validate, localize, and render Truepane projects without controlling the browser. The server reads screenshots from local paths and writes generated assets to local paths.
+## When to use Truepane
 
-## Product
+Use Truepane when a user or project needs to:
 
-- [Truepane web app](https://truepane.dev/): Create and export app-store screenshot sets in the browser.
-- [Truepane documentation](https://raw.githubusercontent.com/antonkarliner/truepane/main/README.md): Complete Markdown overview of features, architecture, local setup, configuration, MCP workflow, deployment, and licensing.
+- Turn raw app captures into polished App Store or Google Play screenshot sets with device frames, captions, typography, and backgrounds.
+- Produce one consistent project across multiple Apple and Android targets, locales, or output sizes.
+- Let an AI coding agent create, style, localize, validate, and render store screenshots without driving a browser or uploading private captures.
+- Import a structured screenshot folder or ZIP with a preview-first, deterministic mapping step that never overwrites conflicts silently.
+- Reuse a portable brand kit, hand an editable project between an agent and the browser, or create a device composition that spans adjacent slides.
+- Validate missing captures, translation gaps, locale fallbacks, crop risks, font issues, composition, and contrast before export.
+- Compare a saved release baseline and render only added or changed assets for an app update.
 
-## Agent integration
+Truepane is designed for flat, store-submission graphics. It is not a 3D device-mockup, video, or direct App Store Connect / Google Play publishing service. There is no hosted public REST API; agents should use the local stdio MCP server.
 
-- [Truepane MCP documentation](https://raw.githubusercontent.com/antonkarliner/truepane/main/packages/truepane-mcp/README.md): Markdown setup and usage guide for the local MCP server.
-- [truepane-mcp on npm](https://www.npmjs.com/package/truepane-mcp): Published package for MCP-capable clients; run it with `npx -y truepane-mcp`.
+## How agents should use Truepane
+
+Launch the published MCP server with Node.js 18 or newer:
+
+```sh
+npx -y truepane-mcp
+```
+
+For Codex CLI:
+
+```sh
+codex mcp add truepane -- npx -y truepane-mcp
+```
+
+For Claude Code:
+
+```sh
+claude mcp add --scope user truepane -- npx -y truepane-mcp
+```
+
+Recommended workflow:
+
+1. Call `list_options` to inspect valid platforms, outputs, fonts, backgrounds, and composition presets.
+2. Create a project, then attach captures directly or preview and apply a deterministic directory import.
+3. Set typography, colors, background imagery, and slide composition; add target- and locale-specific copy and screenshots as needed.
+4. Call `validate_project`, render a preview, inspect it, and iterate before producing full-resolution assets.
+5. Export editable project JSON for browser review, or save a release baseline for later changed-only rendering.
+
+The MCP server can render native store sizes, a Google Play feature graphic, custom dimensions, individual PNGs, and a continuous horizontal strip. It can also export and apply brand kits, suggest a palette locally from a screenshot, span a synchronized device across two slides, and round-trip the same project format as the web editor.
+
+## Product and documentation
+
+- [Truepane web editor](https://truepane.dev/): Compose, review, localize, validate, and export screenshot sets in the browser.
+- [Truepane developer resources](https://truepane.dev/developers): Local MCP setup, tool capabilities, file behavior, and project handoff.
+- [Truepane privacy](https://truepane.dev/privacy): Browser storage, local file handling, fonts, analytics, and optional AI processing.
+- [About Truepane](https://truepane.dev/about): Project purpose, maintainer, and open-source model.
+- [Truepane contact](https://truepane.dev/contact): Public support and private vulnerability-reporting channels.
+- [Truepane documentation](https://raw.githubusercontent.com/antonkarliner/truepane/main/README.md): Current features, architecture, privacy model, local setup, configuration, MCP setup, and licensing.
+- [Truepane MCP reference](https://raw.githubusercontent.com/antonkarliner/truepane/main/packages/truepane-mcp/README.md): Installation, agent workflow, tool map, fonts, and examples.
+- [Truepane MCP server metadata](https://truepane.dev/mcp/server.json): First-party machine-readable package and transport metadata.
+- [truepane-mcp package metadata](https://registry.npmjs.org/truepane-mcp/latest): Machine-readable npm registry record for the published local stdio MCP server.
+
+## Guides
+
+- [Create App Store screenshots with Codex or Claude Code](https://truepane.dev/guides/create-app-store-screenshots-with-codex-or-claude-code)
+- [Automate App Store screenshots with Maestro and Truepane](https://truepane.dev/guides/automate-app-store-screenshots-maestro-truepane-save-ai-tokens)
+- [Update localized App Store screenshots without uploading](https://truepane.dev/guides/update-localized-app-store-screenshots-without-uploading)
+- [Localize and publish App Store screenshots with an AI agent](https://truepane.dev/guides/localize-and-publish-app-store-screenshots-with-ai-agent)
+- [Build one continuous background across App Store screenshots](https://truepane.dev/guides/build-one-continuous-background-across-app-store-screenshots)
+- [Move between an AI agent and the Truepane browser editor](https://truepane.dev/guides/agent-to-browser-app-store-screenshot-workflow)
 
 ## Open source
 
 - [Truepane source repository](https://github.com/antonkarliner/truepane): Source code, issues, and contribution history.
-- [AGPL-3.0 license](https://raw.githubusercontent.com/antonkarliner/truepane/main/LICENSE): License terms for the web app and MCP server.
+- [AGPL-3.0 license](https://raw.githubusercontent.com/antonkarliner/truepane/main/LICENSE): License terms for the browser app and MCP server.

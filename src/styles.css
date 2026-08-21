@@ -1306,7 +1306,9 @@ button { cursor: pointer; font: inherit; }
 body[data-route="editor"] > .seo-content,
 body[data-route="editor"] > .site-footer,
 body[data-route="guide"] > .seo-content,
-body[data-route="guide"] > .site-footer { display: none; }
+body[data-route="guide"] > .site-footer,
+body[data-route="static"] > .seo-content,
+body[data-route="static"] > .site-footer { display: none; }
 
 /* Crawlable product content below the welcome screen. */
 .seo-content {
@@ -1893,7 +1895,8 @@ body[data-route="guide"] > .site-footer { display: none; }
   /* Use dvh so the layout accounts for the collapsing address bar */
   html, body { min-height: 100%; }
   #root { height: 100dvh; overflow: hidden; }
-  body[data-route="guide"] #root { height: auto; overflow: visible; }
+  body[data-route="guide"] #root,
+  body[data-route="static"] #root { height: auto; overflow: visible; }
 
   .mobile-layout {
     display: flex;

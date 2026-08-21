@@ -7,12 +7,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { cloudflare } from "@cloudflare/vite-plugin";
 import { GUIDE_REGISTRY, GuidePage, type GuideSlug } from "./src/GuidePage";
+import { STATIC_PAGE_REGISTRY, StaticPage, type StaticPageSlug } from "./src/StaticPage";
 
 const SEO_TITLE = "Truepane - App Store Screenshot Generator for Indie Apps";
 const SEO_DESCRIPTION =
   "Create App Store and Google Play screenshots in your browser with device frames, your own background images or generated ones, local canvas rendering, and PNG, strip, or ZIP export.";
 const DEFAULT_SITE_URL = "https://truepane.dev";
 const GUIDE_SLUGS = Object.keys(GUIDE_REGISTRY) as GuideSlug[];
+const STATIC_PAGE_SLUGS = Object.keys(STATIC_PAGE_REGISTRY) as StaticPageSlug[];
 
 function normalizeSiteUrl(raw: string | undefined): string | null {
   const value = raw?.trim().replace(/\/+$/, "");
@@ -29,6 +31,9 @@ function jsonLd(siteUrl: string | null): string {
     operatingSystem: "Any modern browser",
     headline: SEO_TITLE,
     description: SEO_DESCRIPTION,
+    author: { "@type": "Person", name: "Anton Karliner" },
+    maintainer: { "@type": "Person", name: "Anton Karliner" },
+    codeRepository: "https://github.com/antonkarliner/truepane",
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     featureList: [
       "App Store and Google Play screenshot generation",
@@ -173,6 +178,45 @@ function prerenderEditor(indexHtml: string, siteUrl: string): string {
     .replace("<body>", '<body data-route="editor">');
 }
 
+function prerenderStaticPage(indexHtml: string, slug: StaticPageSlug, siteUrl: string): string {
+  const page = STATIC_PAGE_REGISTRY[slug];
+  const canonical = `${siteUrl}/${slug}`;
+  const article = renderToStaticMarkup(createElement(StaticPage, { slug }));
+
+  return indexHtml
+    .replace(/<title>.*?<\/title>/s, `<title>${escapeHtml(page.title)}</title>`)
+    .replace(
+      /<meta name="description" content="[^"]*" \/>/,
+      `<meta name="description" content="${escapeHtml(page.description)}" />`,
+    )
+    .replace(
+      /<meta property="og:title" content="[^"]*" \/>/,
+      `<meta property="og:title" content="${escapeHtml(page.title)}" />`,
+    )
+    .replace(
+      /<meta property="og:description" content="[^"]*" \/>/,
+      `<meta property="og:description" content="${escapeHtml(page.description)}" />`,
+    )
+    .replace(
+      /<meta name="twitter:title" content="[^"]*" \/>/,
+      `<meta name="twitter:title" content="${escapeHtml(page.title)}" />`,
+    )
+    .replace(
+      /<meta name="twitter:description" content="[^"]*" \/>/,
+      `<meta name="twitter:description" content="${escapeHtml(page.description)}" />`,
+    )
+    .replace(
+      /<link rel="canonical" href="[^"]*" \/>/,
+      `<link rel="canonical" href="${escapeHtml(canonical)}" />`,
+    )
+    .replace(
+      /<meta property="og:url" content="[^"]*" \/>/,
+      `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
+    )
+    .replace("<body>", '<body data-route="static">')
+    .replace('<div id="root"></div>', `<div id="root">${article}</div>`);
+}
+
 function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
   return {
     name: "truepane-seo",
@@ -212,7 +256,7 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${siteUrl}/</loc>\n  </url>\n${GUIDE_SLUGS.map((slug) => `  <url>\n    <loc>${siteUrl}/guides/${slug}</loc>\n  </url>`).join("\n")}\n</urlset>\n`,
+        source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>${siteUrl}/</loc>\n  </url>\n${STATIC_PAGE_SLUGS.map((slug) => `  <url>\n    <loc>${siteUrl}/${slug}</loc>\n  </url>`).join("\n")}\n${GUIDE_SLUGS.map((slug) => `  <url>\n    <loc>${siteUrl}/guides/${slug}</loc>\n  </url>`).join("\n")}\n</urlset>\n`,
       });
 
     },
@@ -220,16 +264,43 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
       if (!siteUrl || !options.dir) return;
       const indexHtml = await readFile(join(options.dir, "index.html"), "utf8");
       await writeFile(join(options.dir, "editor.html"), prerenderEditor(indexHtml, siteUrl));
+      for (const slug of STATIC_PAGE_SLUGS) {
+        await writeFile(join(options.dir, `${slug}.html`), prerenderStaticPage(indexHtml, slug, siteUrl));
+      }
       const guidesDir = join(options.dir, "guides");
       await mkdir(guidesDir, { recursive: true });
       for (const slug of GUIDE_SLUGS) {
         await writeFile(join(guidesDir, `${slug}.html`), prerenderGuide(indexHtml, slug, siteUrl));
       }
 
+      const serverSource = await readFile("packages/truepane-mcp/server.json", "utf8");
+      const server = JSON.parse(serverSource) as {
+        name: string;
+        version: string;
+        packages: Array<{ identifier: string; version: string }>;
+      };
+      const packageMetadata = JSON.parse(
+        await readFile("packages/truepane-mcp/package.json", "utf8"),
+      ) as { name: string; version: string; mcpName: string };
+      const publishedPackage = server.packages[0];
+      if (
+        server.name !== packageMetadata.mcpName
+        || server.version !== packageMetadata.version
+        || publishedPackage?.identifier !== packageMetadata.name
+        || publishedPackage.version !== packageMetadata.version
+      ) {
+        throw new Error("truepane-mcp package.json and server.json metadata are out of sync");
+      }
+      const mcpDir = join(options.dir, "mcp");
+      await mkdir(mcpDir, { recursive: true });
+      await writeFile(join(mcpDir, "server.json"), serverSource);
+
       const requiredArtifacts = [
         "editor.html",
         "404.html",
         "llms.txt",
+        join("mcp", "server.json"),
+        ...STATIC_PAGE_SLUGS.map((slug) => `${slug}.html`),
         ...GUIDE_SLUGS.map((slug) => join("guides", `${slug}.html`)),
       ];
       await Promise.all(requiredArtifacts.map((file) => access(join(options.dir!, file))));

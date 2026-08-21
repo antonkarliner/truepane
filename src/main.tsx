@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./App";
 import { GUIDE_REGISTRY, GuidePage, type GuideSlug } from "./GuidePage";
+import { STATIC_PAGE_REGISTRY, StaticPage, type StaticPageSlug } from "./StaticPage";
 import { applyTheme, initialTheme, type Theme } from "./theme";
 import { Welcome } from "./Welcome";
 import "./styles.css";
@@ -26,7 +27,7 @@ function initializeSeoCopyButtons(): void {
   });
 }
 
-type Route = "/" | "/editor" | `/guides/${GuideSlug}`;
+type Route = "/" | "/editor" | `/guides/${GuideSlug}` | `/${StaticPageSlug}`;
 
 function currentRoute(): Route {
   if (window.location.pathname === "/editor") return "/editor";
@@ -36,15 +37,28 @@ function currentRoute(): Route {
   if (Object.prototype.hasOwnProperty.call(GUIDE_REGISTRY, guideSlug)) {
     return window.location.pathname as Route;
   }
+  const staticSlug = window.location.pathname.slice(1);
+  if (Object.prototype.hasOwnProperty.call(STATIC_PAGE_REGISTRY, staticSlug)) {
+    return window.location.pathname as Route;
+  }
   return "/";
 }
 
 function applyRouteToDocument(route: Route): void {
-  document.body.dataset.route = route.startsWith("/guides/") ? "guide" : route === "/editor" ? "editor" : "home";
+  document.body.dataset.route = route.startsWith("/guides/")
+    ? "guide"
+    : route === "/editor"
+      ? "editor"
+      : route === "/"
+        ? "home"
+        : "static";
   const guide = route.startsWith("/guides/")
     ? GUIDE_REGISTRY[route.slice("/guides/".length) as GuideSlug]
     : null;
-  const metadata = guide ?? {
+  const staticPage = route !== "/" && route !== "/editor" && !route.startsWith("/guides/")
+    ? STATIC_PAGE_REGISTRY[route.slice(1) as StaticPageSlug]
+    : null;
+  const metadata = guide ?? staticPage ?? {
     title: route === "/editor"
       ? "Truepane editor · App Store screenshot generator"
       : "Truepane - App Store Screenshot Generator for Indie Apps",
@@ -127,6 +141,9 @@ function RootExperience() {
   }
   if (route.startsWith("/guides/")) {
     return <GuideExperience slug={route.slice("/guides/".length) as GuideSlug} />;
+  }
+  if (route !== "/") {
+    return <StaticPage slug={route.slice(1) as StaticPageSlug} />;
   }
 
   return (
