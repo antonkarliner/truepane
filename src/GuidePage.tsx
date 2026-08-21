@@ -1,5 +1,6 @@
 import * as React from "react";
 import { MoonIcon, SunIcon } from "@phosphor-icons/react";
+import { HYDRATION_THEME } from "./hydrationTheme";
 
 type GuideEntry = {
   title: string;
@@ -1282,7 +1283,7 @@ export type GuideSlug = keyof typeof GUIDE_REGISTRY;
 
 export function GuidePage({
   slug,
-  theme = "light",
+  theme = HYDRATION_THEME,
   onToggleTheme = () => undefined,
 }: {
   slug: GuideSlug;

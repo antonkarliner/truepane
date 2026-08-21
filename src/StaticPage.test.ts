@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { STATIC_PAGE_REGISTRY, StaticPage, type StaticPageSlug } from "./StaticPage";
+import { GUIDE_REGISTRY, GuidePage, type GuideSlug } from "./GuidePage";
+import { HYDRATION_THEME } from "./hydrationTheme";
 
 describe("static information pages", () => {
   it("keeps every declared page substantive and independently addressable", () => {
@@ -22,6 +24,25 @@ describe("static information pages", () => {
 
     expect(developers).toContain("does not expose a hosted public REST API");
     expect(contact).toContain("/security/advisories/new");
+  });
+
+  it("matches prerendered light markup on the first hydration render", () => {
+    const staticPrerender = renderToStaticMarkup(createElement(StaticPage, { slug: "developers" }));
+    const staticHydration = renderToStaticMarkup(createElement(StaticPage, {
+      slug: "developers",
+      theme: HYDRATION_THEME,
+    }));
+    const guideSlug = Object.keys(GUIDE_REGISTRY)[0] as GuideSlug;
+    const guidePrerender = renderToStaticMarkup(createElement(GuidePage, { slug: guideSlug }));
+    const guideHydration = renderToStaticMarkup(createElement(GuidePage, {
+      slug: guideSlug,
+      theme: HYDRATION_THEME,
+    }));
+
+    expect(staticHydration).toBe(staticPrerender);
+    expect(guideHydration).toBe(guidePrerender);
+    expect(staticHydration).toContain('aria-label="Switch to dark mode"');
+    expect(guideHydration).toContain('aria-label="Switch to dark mode"');
   });
 });
 

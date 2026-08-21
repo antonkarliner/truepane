@@ -1,5 +1,6 @@
 import * as React from "react";
 import { GuideHeader } from "./GuidePage";
+import { HYDRATION_THEME } from "./hydrationTheme";
 
 type StaticPageEntry = {
   title: string;
@@ -201,7 +202,7 @@ export type StaticPageSlug = keyof typeof STATIC_PAGE_REGISTRY;
 
 export function StaticPage({
   slug,
-  theme = "light",
+  theme = HYDRATION_THEME,
   onToggleTheme = () => undefined,
 }: {
   slug: StaticPageSlug;

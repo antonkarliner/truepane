@@ -3,6 +3,7 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./App";
 import { GUIDE_REGISTRY, GuidePage, type GuideSlug } from "./GuidePage";
 import { STATIC_PAGE_REGISTRY, StaticPage, type StaticPageSlug } from "./StaticPage";
+import { HYDRATION_THEME } from "./hydrationTheme";
 import { applyTheme, initialTheme, type Theme } from "./theme";
 import { Welcome } from "./Welcome";
 import "./styles.css";
@@ -111,7 +112,6 @@ function applyRouteToDocument(route: Route): void {
   }
 }
 
-initialTheme();
 initializeSeoCopyButtons();
 const startingRoute = currentRoute();
 applyRouteToDocument(startingRoute);
@@ -157,21 +157,23 @@ function RootExperience() {
 }
 
 function GuideExperience({ slug }: { slug: GuideSlug }) {
-  const [theme, setTheme] = useState<Theme>(initialTheme);
-
-  const toggleTheme = () => {
-    setTheme((current) => {
-      const next = current === "dark" ? "light" : "dark";
-      applyTheme(next);
-      return next;
-    });
-  };
+  const [theme, toggleTheme] = useHydratedTheme();
 
   return <GuidePage slug={slug} theme={theme} onToggleTheme={toggleTheme} />;
 }
 
 function StaticExperience({ slug }: { slug: StaticPageSlug }) {
-  const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [theme, toggleTheme] = useHydratedTheme();
+
+  return <StaticPage slug={slug} theme={theme} onToggleTheme={toggleTheme} />;
+}
+
+function useHydratedTheme(): [Theme, () => void] {
+  const [theme, setTheme] = useState<Theme>(HYDRATION_THEME);
+
+  useEffect(() => {
+    setTheme(initialTheme());
+  }, []);
 
   const toggleTheme = () => {
     setTheme((current) => {
@@ -181,7 +183,7 @@ function StaticExperience({ slug }: { slug: StaticPageSlug }) {
     });
   };
 
-  return <StaticPage slug={slug} theme={theme} onToggleTheme={toggleTheme} />;
+  return [theme, toggleTheme];
 }
 
 const rootEl = document.getElementById("root");

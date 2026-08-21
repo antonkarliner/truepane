@@ -38,6 +38,10 @@ describe("homepage Accept negotiation", () => {
   it("uses client order when quality and specificity are equal", () => {
     expect(selectRepresentation("text/markdown, text/html")).toBe("markdown");
   });
+
+  it("prefers the representation with the more specific matching media parameters", () => {
+    expect(selectRepresentation("text/html;q=0.8, text/markdown;charset=utf-8;q=0.8")).toBe("markdown");
+  });
 });
 
 describe("Vary preservation", () => {

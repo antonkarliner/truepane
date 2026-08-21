@@ -146,6 +146,7 @@ export function selectRepresentation(accept: string | null): Representation | nu
       representation: candidate.representation,
       quality: match?.quality ?? 0,
       specificity: match?.specificity ?? -1,
+      parameterSpecificity: match ? Object.keys(match.parameters).length : -1,
       order: match?.order ?? Number.POSITIVE_INFINITY,
       serverOrder,
     };
@@ -154,6 +155,7 @@ export function selectRepresentation(accept: string | null): Representation | nu
     .sort((left, right) => (
       right.quality - left.quality
       || right.specificity - left.specificity
+      || right.parameterSpecificity - left.parameterSpecificity
       || left.order - right.order
       || left.serverOrder - right.serverOrder
     ));
