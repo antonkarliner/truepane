@@ -9,9 +9,7 @@
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "404-page",
-    "run_worker_first": [
-      "/"
-    ]
+    "run_worker_first": true
   },
   "compatibility_flags": [
     "nodejs_compat"
