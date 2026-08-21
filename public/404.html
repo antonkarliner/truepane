@@ -4,9 +4,19 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex" />
-  <meta name="theme-color" content="#f3efe7" />
+  <meta id="theme-color" name="theme-color" content="#f3efe7" />
   <title>Page not found · Truepane</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link id="favicon" rel="icon" type="image/svg+xml" href="/favicon-dark.svg" />
+  <script>
+    (() => {
+      let storedTheme = null;
+      try { storedTheme = localStorage.getItem("appstore-theme"); } catch {}
+      const theme = storedTheme === "light" || storedTheme === "dark"
+        ? storedTheme
+        : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -18,14 +28,12 @@
       --panel: rgba(255,255,255,.44); --mark: #1a1618; --mark-left: #f0e4cc;
       --accent: #c86f2b; --purple: #7b4aa5;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        color-scheme: dark;
-        --page: #211e25; --ink: #f0ece4; --muted: rgba(240,236,228,.62);
-        --line: rgba(255,255,255,.15); --soft-line: rgba(255,255,255,.09);
-        --panel: rgba(255,255,255,.035); --mark: #f0ece4; --mark-left: #211e25;
-        --accent: #e58b43; --purple: #a878cc;
-      }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --page: #211e25; --ink: #f0ece4; --muted: rgba(240,236,228,.62);
+      --line: rgba(255,255,255,.15); --soft-line: rgba(255,255,255,.09);
+      --panel: rgba(255,255,255,.035); --mark: #f0ece4; --mark-left: #211e25;
+      --accent: #e58b43; --purple: #a878cc;
     }
     * { box-sizing: border-box; }
     html, body { min-height: 100%; }
@@ -43,6 +51,7 @@
       display: flex; align-items: center; justify-content: space-between; gap: 24px;
     }
     .site-header { min-height: 80px; border-bottom: 1px solid var(--line); }
+    .header-actions { display: flex; align-items: center; gap: 18px; }
     .brand {
       display: inline-flex; align-items: center; gap: 10px; color: inherit;
       font-size: 18px; font-weight: 600; letter-spacing: -.03em; text-decoration: none;
@@ -59,6 +68,16 @@
       content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
       box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
     }
+    .theme-toggle {
+      width: 34px; height: 34px; display: grid; place-items: center; padding: 0;
+      border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--muted);
+      cursor: pointer; transition: color 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+    .theme-toggle:hover { color: var(--ink); border-color: var(--ink); transform: rotate(8deg); }
+    .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .theme-toggle__sun { display: none; }
+    [data-theme="dark"] .theme-toggle__moon { display: none; }
+    [data-theme="dark"] .theme-toggle__sun { display: block; }
     main {
       display: grid; grid-template-columns: minmax(360px,.9fr) minmax(420px,1.1fr);
       gap: clamp(56px,9vw,140px); align-items: center; padding: clamp(54px,8vh,96px) 0;
@@ -157,6 +176,7 @@
     @media (max-width: 520px) {
       .shell { width: min(100% - 28px,440px); }
       .site-header { min-height: 68px; }
+      .header-actions { gap: 12px; }
       .status span { display: none; }
       main { padding-top: 36px; }
       .actions { display: grid; }
@@ -194,7 +214,18 @@
         </span>
         <span>Truepane</span>
       </a>
-      <div class="status"><span>Route not found</span><strong>404</strong></div>
+      <div class="header-actions">
+        <div class="status"><span>Route not found</span><strong>404</strong></div>
+        <button class="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">
+          <svg class="theme-toggle__moon" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />
+          </svg>
+          <svg class="theme-toggle__sun" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" />
+          </svg>
+        </button>
+      </div>
     </header>
 
     <main>
@@ -238,6 +269,28 @@
   <script>
     const command = document.getElementById("agent-command");
     if (command) command.textContent = `curl -H "Accept: text/markdown" ${window.location.href}`;
+
+    const themeToggle = document.querySelector(".theme-toggle");
+    const favicon = document.getElementById("favicon");
+    const themeColor = document.getElementById("theme-color");
+    const applyTheme = (theme, persist = true) => {
+      document.documentElement.dataset.theme = theme;
+      if (favicon) favicon.href = theme === "dark" ? "/favicon-light.svg" : "/favicon-dark.svg";
+      if (themeColor) themeColor.content = theme === "dark" ? "#211e25" : "#f3efe7";
+      const label = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+      if (themeToggle) {
+        themeToggle.setAttribute("aria-label", label);
+        themeToggle.title = label;
+      }
+      if (persist) {
+        try { localStorage.setItem("appstore-theme", theme); } catch {}
+      }
+    };
+
+    applyTheme(document.documentElement.dataset.theme, false);
+    themeToggle?.addEventListener("click", () => {
+      applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    });
   </script>
 </body>
 </html>
