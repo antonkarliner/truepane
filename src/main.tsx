@@ -143,7 +143,7 @@ function RootExperience() {
     return <GuideExperience slug={route.slice("/guides/".length) as GuideSlug} />;
   }
   if (route !== "/") {
-    return <StaticPage slug={route.slice(1) as StaticPageSlug} />;
+    return <StaticExperience slug={route.slice(1) as StaticPageSlug} />;
   }
 
   return (
@@ -168,6 +168,20 @@ function GuideExperience({ slug }: { slug: GuideSlug }) {
   };
 
   return <GuidePage slug={slug} theme={theme} onToggleTheme={toggleTheme} />;
+}
+
+function StaticExperience({ slug }: { slug: StaticPageSlug }) {
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+
+  const toggleTheme = () => {
+    setTheme((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      applyTheme(next);
+      return next;
+    });
+  };
+
+  return <StaticPage slug={slug} theme={theme} onToggleTheme={toggleTheme} />;
 }
 
 const rootEl = document.getElementById("root");

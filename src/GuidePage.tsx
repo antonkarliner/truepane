@@ -51,7 +51,7 @@ const folderTree = `release-screenshots/
       02-recipe.png
       03-timer.png`;
 
-function GuideHeader({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTheme: () => void }) {
+export function GuideHeader({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTheme: () => void }) {
   return (
     <header className="guide-header">
       <a className="guide-header__brand" href="/" aria-label="Truepane home">

@@ -23,6 +23,14 @@ describe("homepage Accept negotiation", () => {
     expect(selectRepresentation("text/*;q=0.8, text/markdown;q=0")).toBe("html");
   });
 
+  it("rejects Markdown when its requested charset is incompatible", () => {
+    expect(selectRepresentation("text/markdown;charset=iso-8859-1")).toBeNull();
+  });
+
+  it("accepts Markdown with a compatible UTF-8 charset parameter", () => {
+    expect(selectRepresentation('text/markdown;charset="UTF-8"')).toBe("markdown");
+  });
+
   it("returns no representation when both are rejected", () => {
     expect(selectRepresentation("text/html;q=0, text/markdown;q=0")).toBeNull();
   });

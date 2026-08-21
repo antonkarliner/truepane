@@ -1,23 +1,11 @@
 import * as React from "react";
+import { GuideHeader } from "./GuidePage";
 
 type StaticPageEntry = {
   title: string;
   description: string;
   component: () => React.JSX.Element;
 };
-
-function PageHeader() {
-  return (
-    <header className="guide-header">
-      <a className="guide-header__brand" href="/" aria-label="Truepane home">Truepane</a>
-      <nav aria-label="Information navigation">
-        <a href="/developers">Developers</a>
-        <a href="/about">About</a>
-        <a href="/editor">Open editor</a>
-      </nav>
-    </header>
-  );
-}
 
 function DevelopersPage() {
   return (
@@ -211,11 +199,19 @@ export const STATIC_PAGE_REGISTRY = {
 
 export type StaticPageSlug = keyof typeof STATIC_PAGE_REGISTRY;
 
-export function StaticPage({ slug }: { slug: StaticPageSlug }) {
+export function StaticPage({
+  slug,
+  theme = "light",
+  onToggleTheme = () => undefined,
+}: {
+  slug: StaticPageSlug;
+  theme?: "light" | "dark";
+  onToggleTheme?: () => void;
+}) {
   const Page = STATIC_PAGE_REGISTRY[slug].component;
   return (
     <div className="guide-page static-page">
-      <PageHeader />
+      <GuideHeader theme={theme} onToggleTheme={onToggleTheme} />
       <article className="guide-article"><Page /></article>
       <footer className="guide-footer">
         <a href="/">Truepane home</a>

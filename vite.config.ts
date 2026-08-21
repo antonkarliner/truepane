@@ -98,6 +98,25 @@ function escapeHtml(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
+const HOME_CONTENT_START = "<!-- truepane:home-content:start -->";
+const HOME_CONTENT_END = "<!-- truepane:home-content:end -->";
+
+function withoutHomeContent(html: string): string {
+  const start = html.indexOf(HOME_CONTENT_START);
+  const end = html.indexOf(HOME_CONTENT_END);
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("Home-only content markers are missing or out of order");
+  }
+  return html.slice(0, start) + html.slice(end + HOME_CONTENT_END.length);
+}
+
+function assertSingleH1(html: string, route: string): void {
+  const h1Count = html.match(/<h1(?:\s|>)/g)?.length ?? 0;
+  if (h1Count !== 1) {
+    throw new Error(`${route} must contain exactly one raw H1; found ${h1Count}`);
+  }
+}
+
 function prerenderGuide(indexHtml: string, slug: GuideSlug, siteUrl: string): string {
   const guide = GUIDE_REGISTRY[slug];
   const route = `/guides/${slug}`;
@@ -106,7 +125,7 @@ function prerenderGuide(indexHtml: string, slug: GuideSlug, siteUrl: string): st
   const socialImageAlt = `${guide.title.replace(/ · Truepane$/, "")} — Truepane guide`;
   const article = renderToStaticMarkup(createElement(GuidePage, { slug }));
 
-  return indexHtml
+  return withoutHomeContent(indexHtml
     .replace(/<title>.*?<\/title>/s, `<title>${escapeHtml(guide.title)}</title>`)
     .replace(
       /<meta name="description" content="[^"]*" \/>/,
@@ -153,7 +172,7 @@ function prerenderGuide(indexHtml: string, slug: GuideSlug, siteUrl: string): st
       `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
     )
     .replace("<body>", '<body data-route="guide">')
-    .replace('<div id="root"></div>', `<div id="root">${article}</div>`);
+    .replace('<div id="root"></div>', `<div id="root">${article}</div>`));
 }
 
 function prerenderEditor(indexHtml: string, siteUrl: string): string {
@@ -161,7 +180,7 @@ function prerenderEditor(indexHtml: string, siteUrl: string): string {
   const description = "Compose and export App Store and Google Play screenshot sets locally in the Truepane editor.";
   const canonical = `${siteUrl}/editor`;
 
-  return indexHtml
+  return withoutHomeContent(indexHtml
     .replace(/<title>.*?<\/title>/s, `<title>${title}</title>`)
     .replace(
       /<meta name="description" content="[^"]*" \/>/,
@@ -175,7 +194,7 @@ function prerenderEditor(indexHtml: string, siteUrl: string): string {
       /<meta property="og:url" content="[^"]*" \/>/,
       `<meta property="og:url" content="${canonical}" />`,
     )
-    .replace("<body>", '<body data-route="editor">');
+    .replace("<body>", '<body data-route="editor">'));
 }
 
 function prerenderStaticPage(indexHtml: string, slug: StaticPageSlug, siteUrl: string): string {
@@ -183,7 +202,7 @@ function prerenderStaticPage(indexHtml: string, slug: StaticPageSlug, siteUrl: s
   const canonical = `${siteUrl}/${slug}`;
   const article = renderToStaticMarkup(createElement(StaticPage, { slug }));
 
-  return indexHtml
+  return withoutHomeContent(indexHtml
     .replace(/<title>.*?<\/title>/s, `<title>${escapeHtml(page.title)}</title>`)
     .replace(
       /<meta name="description" content="[^"]*" \/>/,
@@ -214,7 +233,7 @@ function prerenderStaticPage(indexHtml: string, slug: StaticPageSlug, siteUrl: s
       `<meta property="og:url" content="${escapeHtml(canonical)}" />`,
     )
     .replace("<body>", '<body data-route="static">')
-    .replace('<div id="root"></div>', `<div id="root">${article}</div>`);
+    .replace('<div id="root"></div>', `<div id="root">${article}</div>`));
 }
 
 function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
@@ -268,7 +287,9 @@ function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
       const indexHtml = await readFile(join(options.dir, "index.html"), "utf8");
       await writeFile(join(options.dir, "editor.html"), prerenderEditor(indexHtml, siteUrl));
       for (const slug of STATIC_PAGE_SLUGS) {
-        await writeFile(join(options.dir, `${slug}.html`), prerenderStaticPage(indexHtml, slug, siteUrl));
+        const pageHtml = prerenderStaticPage(indexHtml, slug, siteUrl);
+        assertSingleH1(pageHtml, `/${slug}`);
+        await writeFile(join(options.dir, `${slug}.html`), pageHtml);
       }
       const guidesDir = join(options.dir, "guides");
       await mkdir(guidesDir, { recursive: true });
