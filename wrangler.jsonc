@@ -1,12 +1,17 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "appstore-strip-generator",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-05-22",
   "observability": {
     "enabled": true
   },
   "assets": {
-    "not_found_handling": "404-page"
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": [
+      "/"
+    ]
   },
   "compatibility_flags": [
     "nodejs_compat"

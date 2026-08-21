@@ -220,6 +220,9 @@ function prerenderStaticPage(indexHtml: string, slug: StaticPageSlug, siteUrl: s
 function truepaneSeo(siteUrl: string | null, isBuild: boolean): Plugin {
   return {
     name: "truepane-seo",
+    applyToEnvironment(environment) {
+      return environment.name === "client";
+    },
     buildStart() {
       if (isBuild && !siteUrl) {
         this.warn("VITE_PUBLIC_SITE_URL is unset or invalid; omitting canonical, robots.txt, and sitemap.xml.");
